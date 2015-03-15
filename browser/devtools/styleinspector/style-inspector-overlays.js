@@ -16,7 +16,8 @@ const {Cc, Ci, Cu} = require("chrome");
 const {
   Tooltip,
   SwatchColorPickerTooltip,
-  SwatchCubicBezierTooltip
+  SwatchCubicBezierTooltip,
+  CssDocsTooltip
 } = require("devtools/shared/widgets/Tooltip");
 const {CssLogic} = require("devtools/styleinspector/css-logic");
 const {Promise:promise} = Cu.import("resource://gre/modules/Promise.jsm", {});
@@ -277,6 +278,8 @@ TooltipsOverlay.prototype = {
       this.colorPicker = new SwatchColorPickerTooltip(this.view.inspector.panelDoc);
       // Cubic bezier tooltip
       this.cubicBezier = new SwatchCubicBezierTooltip(this.view.inspector.panelDoc);
+      // MDN CSS help tooltip
+      this.cssDocs = new CssDocsTooltip(this.view.inspector.panelDoc);
     }
 
     this._isStarted = true;
@@ -300,6 +303,10 @@ TooltipsOverlay.prototype = {
 
     if (this.cubicBezier) {
       this.cubicBezier.destroy();
+    }
+
+    if (this.cssDocs) {
+      this.cssDocs.destroy();
     }
 
     this._isStarted = false;
@@ -361,6 +368,10 @@ TooltipsOverlay.prototype = {
       this.cubicBezier.hide();
     }
 
+    if (this.isRuleView && this.cssDocs.tooltip.isShown()) {
+      this.cssDocs.hide();
+    }
+
     let inspector = this.view.inspector;
 
     if (type === TOOLTIP_IMAGE_TYPE) {
@@ -388,6 +399,10 @@ TooltipsOverlay.prototype = {
 
     if (this.cubicBezier) {
       this.cubicBezier.hide();
+    }
+
+    if (this.cssDocs) {
+      this.cssDocs.hide();
     }
   },
 

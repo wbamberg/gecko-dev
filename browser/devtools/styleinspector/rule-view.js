@@ -25,6 +25,8 @@ const XUL_NS = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
 const PREF_UA_STYLES = "devtools.inspector.showUserAgentStyles";
 const PREF_DEFAULT_COLOR_UNIT = "devtools.defaultColorUnit";
 
+const PROPERTY_NAME_CLASS = "ruleview-propertyname";
+
 /**
  * These regular expressions are adapted from firebug's css.js, and are
  * used to parse CSSStyleDeclaration's cssText attribute.
@@ -1126,6 +1128,7 @@ function CssRuleView(aInspector, aDoc, aStore, aPageStyle) {
   this._onCopy = this._onCopy.bind(this);
   this._onCopyColor = this._onCopyColor.bind(this);
   this._onToggleOrigSources = this._onToggleOrigSources.bind(this);
+  this._onShowMdnDocs = this._onShowMdnDocs.bind(this);
 
   this.element.addEventListener("copy", this._onCopy);
 
@@ -1198,6 +1201,12 @@ CssRuleView.prototype = {
       type: "checkbox"
     });
 
+    this.menuitemShowMdnDocs = createMenuItem(this._contextmenu, {
+      label: "ruleView.contextmenu.showMdnDocs",
+      accesskey: "ruleView.contextmenu.showMdnDocs.accessKey",
+      command: this._onShowMdnDocs
+    });
+
     let popupset = doc.documentElement.querySelector("popupset");
     if (!popupset) {
       popupset = doc.createElementNS(XUL_NS, "popupset");
@@ -1240,6 +1249,9 @@ CssRuleView.prototype = {
     var showOrig = Services.prefs.getBoolPref(PREF_ORIG_SOURCES);
     this.menuitemSources.setAttribute("checked", showOrig);
 
+    this.menuitemShowMdnDocs.hidden = !this.doc.popupNode.parentNode
+                                      .classList.contains(PROPERTY_NAME_CLASS);
+
     this.menuitemAddRule.disabled = this.inspector.selection.isAnonymousNode();
   },
 
@@ -1261,7 +1273,7 @@ CssRuleView.prototype = {
     let classes = node.classList;
     let prop = getParentTextProperty(node);
 
-    if (classes.contains("ruleview-propertyname") && prop) {
+    if (classes.contains(PROPERTY_NAME_CLASS) && prop) {
       type = overlays.VIEW_NODE_PROPERTY_TYPE;
       value = {
         property: node.textContent,
@@ -1399,6 +1411,16 @@ CssRuleView.prototype = {
   _onToggleOrigSources: function() {
     let isEnabled = Services.prefs.getBoolPref(PREF_ORIG_SOURCES);
     Services.prefs.setBoolPref(PREF_ORIG_SOURCES, !isEnabled);
+  },
+
+  /**
+   *  Show docs from MDN for a CSS property.
+   */
+  _onShowMdnDocs: function() {
+    let cssPropertyName = this.doc.popupNode.textContent;
+    let anchor = this.doc.popupNode.parentNode;
+    let cssDocsTooltip = this.tooltips.cssDocs;
+    cssDocsTooltip.show(anchor, cssPropertyName);
   },
 
   /**
@@ -2141,7 +2163,7 @@ RuleEditor.prototype = {
     });
 
     this.newPropSpan = createChild(this.newPropItem, "span", {
-      class: "ruleview-propertyname",
+      class: PROPERTY_NAME_CLASS,
       tabindex: "0"
     });
 
