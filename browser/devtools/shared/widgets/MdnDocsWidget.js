@@ -249,6 +249,169 @@ function getCssDocs(cssProperty) {
 }
 
 /**
+ * A quick and dirty syntax highlighter for CSS declarations.
+ *
+ * @param {Document} document
+ * A document, which we use for constructing DOM nodes.
+ *
+ * @param {Node} syntaxSection
+ * A DOM node, which will be the host for the marked-up syntax section.
+ *
+ * @param {string} syntaxText
+ * The syntax to parse, as a string.
+ *
+ * @returns Node
+ * The syntax section, with all its children added.
+ *
+ * This function turns the string in syntaxText into a collection of DOM
+ * nodes, which are inserted as children of syntaxSection.
+ *
+ * The DOM nodes it inserts represent:
+ * - CSS comments, which are inserted as TEXT nodes
+ * - CSS declarations, which are inserted as:
+ *   - SPAN: propertyName
+ *   - TEXT: ": "
+ *   - SPAN: propertValue
+ *   - TEXT: any trailing ";" and spaces
+ * The SPAN nodes have CSS classes applied which will give them distinct colors.
+ * The colors are chosen to match the colors in the Inspector's rule view.
+ *
+ * This function has the following goals and non-goals:
+ * - it aims to parse CSS comments correctly, not putting any additional
+ * constraints on how you comment up your example.
+ * - it takes a very simplistic approach to parsing declarations. It simply:
+ *  - removes any trailing ";" and whitespace and calls this a postfix
+ *  - splits the remainder at the first ":". Treats the first half
+ *  of this as name and the second half as value.
+ *  - creates: [name | ": " | value | postfix]
+ * - it doesn't try to validate the CSS at all. If your CSS is invalid the
+ * syntax highlighting might not work (but the function should not crash)
+ * - it doesn't try to distinguish different data types for values.
+ */
+function populatePropertySyntax(doc, syntaxSection, syntaxText) {
+
+  function processDeclaration(declaration) {
+    if (declaration.length === 0) {
+      return;
+    }
+
+    let index = declaration.indexOf(":");
+    if (index === -1) {
+      // syntax error, add all of declaration as a text node
+    }
+    else {
+      // remove a terminal ";" plus any trailing spaces, preserving them in a variable
+      let declarationPostfixMatches = declaration.match(/;?( +)?$/);
+      let declarationPostfix = declarationPostfixMatches? declarationPostfixMatches[0]: "";
+      declaration = declaration.substring(0, declaration.length - declarationPostfix.length);
+
+      // split name and value
+      let propertyName = declaration.slice(0, index);
+      let propertyValue = declaration.slice(index + 1, declaration.length);
+
+      // create spans for name and value
+      let propertyNameNode = doc.createElement("span");
+      propertyNameNode.classList.add("theme-fg-color5");
+      propertyNameNode.textContent = propertyName;
+      syntaxSection.appendChild(propertyNameNode);
+
+      let separator = doc.createTextNode(": ");
+      syntaxSection.appendChild(separator);
+
+      let propertyValueNode = doc.createElement("span");
+      propertyValueNode.classList.add("theme-fg-color1");
+      propertyValueNode.textContent = propertyValue;
+      syntaxSection.appendChild(propertyValueNode);
+
+      let terminator = doc.createTextNode(declarationPostfix);
+      syntaxSection.appendChild(terminator);
+    }
+  }
+
+  function processComment(comment) {
+    // just a text node
+    let textNode = doc.createTextNode(comment);
+    syntaxSection.appendChild(textNode);
+  }
+
+  function processInCommentMode(inputString) {
+    //-> look for comment termination
+    //  -> if none, add this line as a comment, return true
+    //  -> if there is one, add start of line to termination as a comment, return parseInNonCommentMode(string remainder)
+    const COMMENT_CLOSER = "*/";
+    let index = inputString.indexOf(COMMENT_CLOSER);
+  
+    if (index === -1) {
+      // the string contained no comment closer
+      // the whole string is a comment, and we are
+      // still in comment mode
+      processComment(inputString);
+      return true;
+    }
+    else {
+      // remainder is what's left after the end of the comment closer
+      let remainder = inputString.slice(index + COMMENT_CLOSER.length, inputString.length);
+      if (remainder.length === 0) {
+        //the comment closer was at the end of the string
+        processComment(inputString);
+        return false;
+      }
+      else {
+        // there is some non-comment after the comment closer
+        processComment(inputString.slice(0, index + COMMENT_CLOSER.length));
+        return processInNonCommentMode(remainder);
+      }
+    }
+  }
+
+  function processInNonCommentMode(inputString) {
+    // -> look for comment opening
+    //  -> if none, add this line as declaration, return false
+    //  -> if one, add start of line to opening as a declaration, return parseInCommentMode(remainder)
+    const COMMENT_OPENER = "/*";
+    let index = inputString.indexOf(COMMENT_OPENER);
+
+    if (index === -1) {
+      // the string contained no comment opener
+      // the whole string is a declaration, and we are
+      // still in non-comment mode
+      processDeclaration(inputString);
+      return false;
+    }
+    else {
+      // the string contained a comment opener.
+      // the part before the comment opener is a declaration
+      // then switch to comment mode and process the rest
+      processDeclaration(inputString.slice(0, index));
+      return processInCommentMode(inputString.slice(index, inputString.length));
+    }
+  }
+
+  if (!syntaxText) {
+    return;
+  }
+
+  let isInCommentMode = false;
+  let lines = syntaxText.split("\n");
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+
+    if (isInCommentMode) {
+      isInCommentMode = processInCommentMode(line)
+    }
+    else {
+      isInCommentMode = processInNonCommentMode(line)
+    }
+
+    let lineBreak = doc.createElement("br");
+    syntaxSection.appendChild(lineBreak);
+  }
+
+  return syntaxSection;
+}
+
+/**
  * The MdnDocsWidget is used by tooltip code that needs to display docs
  * from MDN in a tooltip. The tooltip code loads a document that contains the
  * basic structure of a docs tooltip (loaded from mdn-docs-frame.xhtml),
@@ -339,8 +502,9 @@ MdnDocsWidget.prototype = {
       let propertySummary = tooltipDocument.getElementById("summary");
       propertySummary.textContent = summary;
 
-      let propertySyntax = tooltipDocument.getElementById("syntax");
-      propertySyntax.textContent = syntax;
+      // populate property syntax section
+      let propertySyntaxSection = tooltipDocument.getElementById("syntax");
+      let propertySyntaxContent = populatePropertySyntax(tooltipDocument, propertySyntaxSection, syntax);
 
       // hide the throbber
       let propertyInfo = tooltipDocument.getElementById("property-info");
@@ -364,7 +528,9 @@ MdnDocsWidget.prototype = {
       let propertyInfo = tooltipDocument.getElementById("property-info");
       propertyInfo.classList.remove("devtools-throbber");
 
-      deferred.reject(this);
+      // although gotError is called when there's an error, we have handled
+      // the error, so call resolve not reject.
+      deferred.resolve(this);
     }
 
     let deferred = Promise.defer();
