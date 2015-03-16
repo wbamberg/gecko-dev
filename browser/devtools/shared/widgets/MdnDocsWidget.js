@@ -307,7 +307,7 @@ function populatePropertySyntax(doc, syntaxSection, syntaxText) {
 
       // split name and value
       let propertyName = declaration.slice(0, index);
-      let propertyValue = declaration.slice(index + 1, declaration.length);
+      let propertyValue = declaration.slice(index + 1, declaration.length).trim();
 
       // create spans for name and value
       let propertyNameNode = doc.createElement("span");

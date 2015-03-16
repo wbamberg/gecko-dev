@@ -28,6 +28,10 @@ header, footer {
   transition: opacity 400ms ease-in;
 }
 
+#syntax {
+  margin-top: 1em;
+}
+
 .devtools-throbber {
   opacity: 0;
   align-self: center;
