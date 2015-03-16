@@ -302,29 +302,33 @@ function populatePropertySyntax(doc, syntaxSection, syntaxText) {
     else {
       // remove a terminal ";" plus any trailing spaces, preserving them in a variable
       let declarationPostfixMatches = declaration.match(/;?( +)?$/);
-      let declarationPostfix = declarationPostfixMatches? declarationPostfixMatches[0]: "";
-      declaration = declaration.substring(0, declaration.length - declarationPostfix.length);
+      let declarationPostfix = declarationPostfixMatches?
+                               declarationPostfixMatches[0]: "";
+      let declarationLength = declaration.length - declarationPostfix.length;
+      declaration = declaration.substring(0, declarationLength);
 
       // split name and value
       let propertyName = declaration.slice(0, index);
-      let propertyValue = declaration.slice(index + 1, declaration.length).trim();
+      let propertyValue = declaration.slice(index + 1, declaration.length)
+                                            .trim();
 
-      // create spans for name and value
+      // create spans for name and value,
+      // and text nodes for separator and postfix
       let propertyNameNode = doc.createElement("span");
       propertyNameNode.classList.add("theme-fg-color5");
       propertyNameNode.textContent = propertyName;
       syntaxSection.appendChild(propertyNameNode);
 
-      let separator = doc.createTextNode(": ");
-      syntaxSection.appendChild(separator);
+      let separatorNode = doc.createTextNode(": ");
+      syntaxSection.appendChild(separatorNode);
 
       let propertyValueNode = doc.createElement("span");
       propertyValueNode.classList.add("theme-fg-color1");
       propertyValueNode.textContent = propertyValue;
       syntaxSection.appendChild(propertyValueNode);
 
-      let terminator = doc.createTextNode(declarationPostfix);
-      syntaxSection.appendChild(terminator);
+      let postfixNode = doc.createTextNode(declarationPostfix);
+      syntaxSection.appendChild(postfixNode);
     }
   }
 
