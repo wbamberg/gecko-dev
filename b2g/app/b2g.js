@@ -322,6 +322,7 @@ pref("media.fragmented-mp4.gonk.enabled", true);
 pref("media.video-queue.default-size", 3);
 
 // optimize images' memory usage
+pref("image.downscale-during-decode.enabled", true);
 pref("image.mem.decodeondraw", true);
 pref("image.mem.allow_locking_in_content_processes", false); /* don't allow image locking */
 // Limit the surface cache to 1/8 of main memory or 128MB, whichever is smaller.
@@ -693,6 +694,9 @@ pref("ui.scrollbarFadeDuration", 200);
 
 // Scrollbar position follows the document `dir` attribute
 pref("layout.scrollbar.side", 1);
+
+// CSS Scroll Snapping
+pref("layout.css.scroll-snap.enabled", true);
 
 // Enable the ProcessPriorityManager, and give processes with no visible
 // documents a 1s grace period before they're eligible to be marked as

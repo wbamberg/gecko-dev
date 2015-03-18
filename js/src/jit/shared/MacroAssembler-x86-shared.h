@@ -500,6 +500,69 @@ class MacroAssemblerX86Shared : public Assembler
 
 #undef ATOMIC_BITOP_BODY
 
+    // S is Register or Imm32; T is Address or BaseIndex.
+
+    template <typename S, typename T>
+    void atomicAdd8(const S &src, const T &mem) {
+        lock_addb(src, Operand(mem));
+    }
+    template <typename S, typename T>
+    void atomicAdd16(const S &src, const T &mem) {
+        lock_addw(src, Operand(mem));
+    }
+    template <typename S, typename T>
+    void atomicAdd32(const S &src, const T &mem) {
+        lock_addl(src, Operand(mem));
+    }
+    template <typename S, typename T>
+    void atomicSub8(const S &src, const T &mem) {
+        lock_subb(src, Operand(mem));
+    }
+    template <typename S, typename T>
+    void atomicSub16(const S &src, const T &mem) {
+        lock_subw(src, Operand(mem));
+    }
+    template <typename S, typename T>
+    void atomicSub32(const S &src, const T &mem) {
+        lock_subl(src, Operand(mem));
+    }
+    template <typename S, typename T>
+    void atomicAnd8(const S &src, const T &mem) {
+        lock_andb(src, Operand(mem));
+    }
+    template <typename S, typename T>
+    void atomicAnd16(const S &src, const T &mem) {
+        lock_andw(src, Operand(mem));
+    }
+    template <typename S, typename T>
+    void atomicAnd32(const S &src, const T &mem) {
+        lock_andl(src, Operand(mem));
+    }
+    template <typename S, typename T>
+    void atomicOr8(const S &src, const T &mem) {
+        lock_orb(src, Operand(mem));
+    }
+    template <typename S, typename T>
+    void atomicOr16(const S &src, const T &mem) {
+        lock_orw(src, Operand(mem));
+    }
+    template <typename S, typename T>
+    void atomicOr32(const S &src, const T &mem) {
+        lock_orl(src, Operand(mem));
+    }
+    template <typename S, typename T>
+    void atomicXor8(const S &src, const T &mem) {
+        lock_xorb(src, Operand(mem));
+    }
+    template <typename S, typename T>
+    void atomicXor16(const S &src, const T &mem) {
+        lock_xorw(src, Operand(mem));
+    }
+    template <typename S, typename T>
+    void atomicXor32(const S &src, const T &mem) {
+        lock_xorl(src, Operand(mem));
+    }
+
     void storeLoadFence() {
         // This implementation follows Linux.
         if (HasSSE2())
@@ -965,13 +1028,13 @@ class MacroAssemblerX86Shared : public Assembler
     void packedSubInt32(const Operand &src, FloatRegister dest) {
         vpsubd(src, dest, dest);
     }
-    void packedReciprocalFloat32x4(const Operand &src, FloatRegister dest) {
+    void packedRcpApproximationFloat32x4(const Operand &src, FloatRegister dest) {
         // This function is an approximation of the result, this might need
         // fix up if the spec requires a given precision for this operation.
         // TODO See also bug 1068028.
         vrcpps(src, dest);
     }
-    void packedReciprocalSqrtFloat32x4(const Operand &src, FloatRegister dest) {
+    void packedRcpSqrtApproximationFloat32x4(const Operand &src, FloatRegister dest) {
         // TODO See comment above. See also bug 1068028.
         vrsqrtps(src, dest);
     }

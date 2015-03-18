@@ -1970,12 +1970,12 @@ class MSimdUnaryArith
 
     static const char* OperationName(Operation op) {
         switch (op) {
-          case abs:            return "abs";
-          case neg:            return "neg";
-          case not_:           return "not";
-          case reciprocal:     return "reciprocal";
-          case reciprocalSqrt: return "reciprocalSqrt";
-          case sqrt:           return "sqrt";
+          case abs:                         return "abs";
+          case neg:                         return "neg";
+          case not_:                        return "not";
+          case reciprocalApproximation:     return "reciprocalApproximation";
+          case reciprocalSqrtApproximation: return "reciprocalSqrtApproximation";
+          case sqrt:                        return "sqrt";
         }
         MOZ_CRASH("unexpected operation");
     }
@@ -7494,6 +7494,7 @@ class MElements
     AliasSet getAliasSet() const MOZ_OVERRIDE {
         return AliasSet::Load(AliasSet::ObjectFields);
     }
+    bool mightAlias(const MDefinition *store) const;
 
     ALLOW_CLONE(MElements)
 };
@@ -7681,6 +7682,7 @@ class MInitializedLength
     AliasSet getAliasSet() const MOZ_OVERRIDE {
         return AliasSet::Load(AliasSet::ObjectFields);
     }
+    bool mightAlias(const MDefinition *store) const;
 
     void computeRange(TempAllocator &alloc) MOZ_OVERRIDE;
 
@@ -8184,6 +8186,7 @@ class MLoadElement
     AliasSet getAliasSet() const MOZ_OVERRIDE {
         return AliasSet::Load(AliasSet::Element);
     }
+    bool mightAlias(const MDefinition *store) const;
 
     ALLOW_CLONE(MLoadElement)
 };

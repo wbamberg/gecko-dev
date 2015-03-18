@@ -39,8 +39,8 @@ PRLogModuleInfo* GetDemuxerLog() {
   }
   return log;
 }
-#define LOG(...) PR_LOG(GetDemuxerLog(), PR_LOG_DEBUG, (__VA_ARGS__))
-#define VLOG(...) PR_LOG(GetDemuxerLog(), PR_LOG_DEBUG+1, (__VA_ARGS__))
+#define LOG(arg, ...) PR_LOG(GetDemuxerLog(), PR_LOG_DEBUG, ("MP4Reader(%p)::%s: " arg, this, __func__, ##__VA_ARGS__))
+#define VLOG(arg, ...) PR_LOG(GetDemuxerLog(), PR_LOG_DEBUG, ("MP4Reader(%p)::%s: " arg, this, __func__, ##__VA_ARGS__))
 #else
 #define LOG(...)
 #define VLOG(...)
@@ -322,7 +322,7 @@ bool MP4Reader::IsWaitingOnCDMResource() {
   // We'll keep waiting if the CDM hasn't informed Gecko of its capabilities.
   {
     CDMCaps::AutoLock caps(proxy->Capabilites());
-    LOG("MP4Reader::IsWaitingMediaResources() capsKnown=%d", caps.AreCapsKnown());
+    LOG("capsKnown=%d", caps.AreCapsKnown());
     return !caps.AreCapsKnown();
   }
 #else
@@ -486,9 +486,7 @@ MP4Reader::ReadMetadata(MediaInfo* aInfo,
     mInfo.mVideo.mDisplay =
       nsIntSize(video.display_width, video.display_height);
     mVideo.mCallback = new DecoderCallback(this, kVideo);
-    if (!mIsEncrypted && mSharedDecoderManager) {
-      // Note: Don't use SharedDecoderManager in EME content, as it doesn't
-      // handle reiniting the decoder properly yet.
+    if (mSharedDecoderManager) {
       mVideo.mDecoder =
         mSharedDecoderManager->CreateVideoDecoder(mPlatform,
                                                   video,
@@ -580,7 +578,7 @@ MP4Reader::GetNextKeyframeTime()
 void
 MP4Reader::DisableHardwareAcceleration()
 {
-  if (HasVideo() && !mIsEncrypted && mSharedDecoderManager) {
+  if (HasVideo() && mSharedDecoderManager) {
     mPlatform->DisableHardwareAcceleration();
 
     const VideoDecoderConfig& video = mDemuxer->VideoConfig();
@@ -618,7 +616,7 @@ MP4Reader::RequestVideoData(bool aSkipToNextKeyframe,
                             int64_t aTimeThreshold)
 {
   MOZ_ASSERT(GetTaskQueue()->IsCurrentThreadIn());
-  VLOG("RequestVideoData skip=%d time=%lld", aSkipToNextKeyframe, aTimeThreshold);
+  VLOG("skip=%d time=%lld", aSkipToNextKeyframe, aTimeThreshold);
 
   if (mShutdown) {
     NS_WARNING("RequestVideoData on shutdown MP4Reader!");
@@ -654,7 +652,7 @@ nsRefPtr<MediaDecoderReader::AudioDataPromise>
 MP4Reader::RequestAudioData()
 {
   MOZ_ASSERT(GetTaskQueue()->IsCurrentThreadIn());
-  VLOG("RequestAudioData");
+  VLOG("");
   if (mShutdown) {
     NS_WARNING("RequestAudioData on shutdown MP4Reader!");
     return AudioDataPromise::CreateAndReject(CANCELED, __func__);
@@ -789,7 +787,7 @@ MP4Reader::ReturnOutput(MediaData* aData, TrackType aTrack)
 
     if (audioData->mChannels != mInfo.mAudio.mChannels ||
         audioData->mRate != mInfo.mAudio.mRate) {
-      LOG("MP4Reader::ReturnOutput change of sampling rate:%d->%d",
+      LOG("change of sampling rate:%d->%d",
           mInfo.mAudio.mRate, audioData->mRate);
       mInfo.mAudio.mRate = audioData->mRate;
       mInfo.mAudio.mChannels = audioData->mChannels;
@@ -999,7 +997,7 @@ MP4Reader::SkipVideoDemuxToNextKeyFrame(int64_t aTimeThreshold, uint32_t& parsed
 nsRefPtr<MediaDecoderReader::SeekPromise>
 MP4Reader::Seek(int64_t aTime, int64_t aEndTime)
 {
-  LOG("MP4Reader::Seek(%lld)", aTime);
+  LOG("aTime=(%lld)", aTime);
   MOZ_ASSERT(GetTaskQueue()->IsCurrentThreadIn());
   MonitorAutoLock mon(mDemuxerMonitor);
   if (!mDecoder->GetResource()->IsTransportSeekable() || !mDemuxer->CanSeek()) {
@@ -1019,7 +1017,7 @@ MP4Reader::Seek(int64_t aTime, int64_t aEndTime)
   if (mDemuxer->HasValidAudio()) {
     mAudio.mTrackDemuxer->Seek(seekTime);
   }
-  LOG("MP4Reader::Seek(%lld) exit", aTime);
+  LOG("aTime=%lld exit", aTime);
   return SeekPromise::CreateAndResolve(seekTime, __func__);
 }
 
@@ -1083,8 +1081,9 @@ bool MP4Reader::IsDormantNeeded()
 #endif
         mVideo.mDecoder &&
         mVideo.mDecoder->IsDormantNeeded();
-#endif
+#else
   return false;
+#endif
 }
 
 void MP4Reader::ReleaseMediaResources()
@@ -1110,9 +1109,7 @@ void MP4Reader::NotifyResourcesStatusChanged()
 void
 MP4Reader::SetIdle()
 {
-  if (!mIsEncrypted && mSharedDecoderManager && mVideo.mDecoder) {
-    // Note: Don't use SharedDecoderManager in EME content, as it doesn't
-    // handle reiniting the decoder properly yet.
+  if (mSharedDecoderManager && mVideo.mDecoder) {
     mSharedDecoderManager->SetIdle(mVideo.mDecoder);
     NotifyResourcesStatusChanged();
   }
