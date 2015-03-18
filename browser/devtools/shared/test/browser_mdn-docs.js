@@ -13,10 +13,16 @@ Cu.import("resource://gre/modules/Promise.jsm");
 // frame to load the tooltip into
 const MDN_DOCS_TOOLTIP_FRAME = "chrome://browser/content/devtools/mdn-docs-frame.xhtml";
 
-// URL to use instead of the real developer.mozilla.org
-const TEST_MDN_BASE_URL = "http://example.com/browser/browser/devtools/shared/test/";
-
-// test properties
+/**
+ * Test properties
+ *
+ * In the real tooltip, a CSS property name is used to look up an MDN page
+ * for that property.
+ * In the test code, the names defined here are used to look up a page
+ * served by the test server. We have different properties to test
+ * different ways that the docs pages might be constructed, including errors
+ * like pages that don't include docs where we expect.
+ */
 const BASIC_TESTING_PROPERTY = "html-mdn-css-basic-testing.html";
 const SYNTAX_BY_ID = "html-mdn-css-syntax-id.html";
 const NO_SUMMARY = "html-mdn-css-no-summary.html";
@@ -24,13 +30,13 @@ const NO_SYNTAX = "html-mdn-css-no-syntax.html";
 const NO_SUMMARY_OR_SYNTAX = "html-mdn-css-no-summary-or-syntax.html";
 
 add_task(function*() {
-  setBaseUrl(TEST_MDN_BASE_URL);
+  setBaseUrl(TEST_URI_ROOT);
 
   yield promiseTab("about:blank");
   let [host, win, doc] = yield createHost("bottom", MDN_DOCS_TOOLTIP_FRAME);
   let widget = new MdnDocsWidget(win.document);
 
-  // test all the basics:
+  // test all the basics
   yield testTheBasics(widget);
 
   // test a page that doesn't exist
@@ -57,18 +63,22 @@ add_task(function*() {
 
 });
 
+/**
+ * Test all the basics
+ * - initial content, before docs have loaded, is as expected
+ * - throbber is set before docs have loaded
+ * - contents are as expected after docs have loaded
+ * - throbber is gone after docs have loaded
+ * - mdn link text is correct and onclick behavior is correct
+ */
 function* testTheBasics(widget) {
-  // test all the basics
-  // - initial content, before docs have loaded, is as expected
-  // - throbber is set before docs have loaded
-  // - contents are as expected after docs have loaded
-  // - throbber is gone after docs have loaded
-  // - mdn link text is correct and onclick behavior is correct
   info("Test all the basic functionality in the widget");
   let doc = widget.tooltipDocument;
+
+  info("Get the widget state before docs have loaded");
   let promise = widget.loadCssDocs(BASIC_TESTING_PROPERTY);
 
-  // initial contents
+  info("Check initial contents before docs have loaded");
   checkTooltipContents(doc, {
     propertyName: BASIC_TESTING_PROPERTY,
     summary: "",
@@ -78,9 +88,10 @@ function* testTheBasics(widget) {
   // throbber is set
   checkNodeHasClass(doc, "#property-info", "devtools-throbber", "Throbber is set");
 
+  info("Now let the widget finish loading");
   yield promise;
 
-  // contents after docs have loaded
+  info("Check contents after docs have loaded");
   checkTooltipContents(doc, {
     propertyName: BASIC_TESTING_PROPERTY,
     summary: "A summary of the property.",
@@ -90,12 +101,68 @@ function* testTheBasics(widget) {
   // throbber is gone
   checkNodeHasNotClass(doc, "#property-info", "devtools-throbber", "Throbber is not set");
 
-  // mdn link text is correct and onclick behavior is correct
+  info("Check that MDN link text is correct and onclick behavior is correct");
   yield checkMdnLink(BASIC_TESTING_PROPERTY, widget);
+
+  function* checkMdnLink(testProperty, widget) {
+    let mdnLink = widget.tooltipDocument.querySelector("#visit-mdn-page");
+    is(mdnLink.href, TEST_URI_ROOT + testProperty, "MDN link href is correct");
+
+    let uri = yield checkLinkClick(mdnLink);
+    is(uri, TEST_URI_ROOT + testProperty, "MDN link click behavior is correct");
+  }
+
+  /**
+   * Clicking the "Visit MDN Page" in the tooltip panel
+   * should open a new browser tab with the page loaded.
+   *
+   * To test this we'll listen for a new tab opening, and
+   * when it does, add a listener to that new tab to tell
+   * us when it has loaded.
+   *
+   * Then we click the link.
+   *
+   * In the tab's load listener, we'll resolve the promise
+   * with the URI, which is expected to match the href
+   * in the orginal link.
+   *
+   *
+   * One complexity is that when you open a new tab,
+   * "about:blank" is first loaded into the tab before the
+   * actual page. So we ignore that load event, and keep
+   * listening until "load" is triggered for a different URI.
+   */
+  function checkLinkClick(link) {
+
+    function loadListener(e) {
+      let tab = e.target;
+      var browser = getBrowser().getBrowserForTab(tab);
+      var uri = browser.currentURI.spec;
+      // this is horrible, and it's because when we open a new tab
+      // "about:blank: is first loaded into it, before the actual
+      // document we want to load.
+      if (uri != "about:blank") {
+        tab.removeEventListener("load", loadListener);
+        gBrowser.removeTab(tab);
+        deferred.resolve(uri);
+      }
+    }
+
+    function newTabListener(e) {
+      gBrowser.tabContainer.removeEventListener("TabOpen", newTabListener);
+      var tab = e.target;
+      tab.addEventListener("load", loadListener, false);
+    }
+
+    let deferred = Promise.defer();
+    gBrowser.tabContainer.addEventListener("TabOpen", newTabListener, false);
+    link.click();
+    return deferred.promise;
+  }
+
 }
 
 function* testNonExistentPage(widget) {
-  // test a prop for which we don't have a page
   info("Test a property for which we don't have a page");
   yield widget.loadCssDocs("i-dont-exist.html");
   checkTooltipContents(widget.tooltipDocument, {
@@ -106,7 +173,6 @@ function* testNonExistentPage(widget) {
 }
 
 function* testSyntaxById(widget) {
-  // test a prop for which we don't have a page
   info("Test a property whose syntax section is specified using an ID");
   yield widget.loadCssDocs(SYNTAX_BY_ID);
   checkTooltipContents(widget.tooltipDocument, {
@@ -117,7 +183,6 @@ function* testSyntaxById(widget) {
 }
 
 function* testNoSummary(widget) {
-  // test a prop for which we don't have a summary
   info("Test a property whose page doesn't have a summary");
   yield widget.loadCssDocs(NO_SUMMARY);
   checkTooltipContents(widget.tooltipDocument, {
@@ -128,7 +193,6 @@ function* testNoSummary(widget) {
 }
 
 function* testNoSyntax(widget) {
-  // test a prop for which we don't have a syntax
   info("Test a property whose page doesn't have a syntax");
   yield widget.loadCssDocs(NO_SYNTAX);
   checkTooltipContents(widget.tooltipDocument, {
@@ -139,7 +203,6 @@ function* testNoSyntax(widget) {
 }
 
 function* testNoSummaryOrSyntax(widget) {
-  // test a prop for which we don't have a summary or a syntax
   info("Test a property whose page doesn't have a summary or a syntax");
   yield widget.loadCssDocs(NO_SUMMARY_OR_SYNTAX);
   checkTooltipContents(widget.tooltipDocument, {
@@ -149,47 +212,8 @@ function* testNoSummaryOrSyntax(widget) {
   });
 }
 
-
-function* checkMdnLink(testProperty, widget) {
-  let mdnLink = widget.tooltipDocument.querySelector("#visit-mdn-page");
-  is(mdnLink.href, TEST_MDN_BASE_URL + testProperty, "MDN link href is correct");
-
-  let uri = yield checkLinkClick(mdnLink);
-  is(uri, TEST_MDN_BASE_URL + testProperty, "MDN link click behavior is correct");
-}
-
-function checkLinkClick(link) {
-  // clicking the "Visit MDN Page" in the tooltip
-  // should open a new browser tab with the page loaded
-
-  function loadListener(e) {
-    let tab = e.target;
-    var browser = getBrowser().getBrowserForTab(tab);
-    var uri = browser.currentURI.spec;
-    // this is horrible, and it's because when we open a new tab
-    // "about:blank: is first loaded into it, before the actual
-    // document we want to load.
-    if (uri != "about:blank") {
-      tab.removeEventListener("load", loadListener);
-      gBrowser.removeTab(tab);
-      deferred.resolve(uri);
-    }
-  }
-
-  function newTabListener(e) {
-    gBrowser.tabContainer.removeEventListener("TabOpen", newTabListener);
-    var tab = e.target;
-    tab.addEventListener("load", loadListener, false);
-  }
-
-  let deferred = Promise.defer();
-  gBrowser.tabContainer.addEventListener("TabOpen", newTabListener, false);
-  link.click();
-  return deferred.promise;
-}
-
 /*
- * Functions to check content of the tooltip.
+ * Utility functions to check content of the tooltip.
  */
 
 function checkNodeValue(doc, id, expected, message) {
