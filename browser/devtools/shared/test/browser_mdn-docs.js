@@ -29,6 +29,9 @@ const NO_SUMMARY = "html-mdn-css-no-summary.html";
 const NO_SYNTAX = "html-mdn-css-no-syntax.html";
 const NO_SUMMARY_OR_SYNTAX = "html-mdn-css-no-summary-or-syntax.html";
 
+const BASIC_EXPECTED_SUMMARY = "A summary of the property.";
+const BASIC_EXPECTED_SYNTAX = "/* The part we want   */\nthis: is-the-part-we-want";
+
 add_task(function*() {
   setBaseUrl(TEST_URI_ROOT);
 
@@ -94,8 +97,8 @@ function* testTheBasics(widget) {
   info("Check contents after docs have loaded");
   checkTooltipContents(doc, {
     propertyName: BASIC_TESTING_PROPERTY,
-    summary: "A summary of the property.",
-    syntax: "/* The part we want   */this: is-the-part-we-want"
+    summary: BASIC_EXPECTED_SUMMARY,
+    syntax: BASIC_EXPECTED_SYNTAX
   });
 
   // throbber is gone
@@ -126,10 +129,9 @@ function* testTheBasics(widget) {
    * with the URI, which is expected to match the href
    * in the orginal link.
    *
-   *
    * One complexity is that when you open a new tab,
    * "about:blank" is first loaded into the tab before the
-   * actual page. So we ignore that load event, and keep
+   * actual page. So we ignore that first load event, and keep
    * listening until "load" is triggered for a different URI.
    */
   function checkLinkClick(link) {
@@ -177,8 +179,8 @@ function* testSyntaxById(widget) {
   yield widget.loadCssDocs(SYNTAX_BY_ID);
   checkTooltipContents(widget.tooltipDocument, {
     propertyName: SYNTAX_BY_ID,
-    summary: "A summary of the property.",
-    syntax: "/* The part we want   */this: is-the-part-we-want"
+    summary: BASIC_EXPECTED_SUMMARY,
+    syntax: BASIC_EXPECTED_SYNTAX
   });
 }
 
@@ -188,7 +190,7 @@ function* testNoSummary(widget) {
   checkTooltipContents(widget.tooltipDocument, {
     propertyName: NO_SUMMARY,
     summary: "",
-    syntax: "/* The part we want   */this: is-the-part-we-want"
+    syntax: BASIC_EXPECTED_SYNTAX
   });
 }
 
@@ -197,7 +199,7 @@ function* testNoSyntax(widget) {
   yield widget.loadCssDocs(NO_SYNTAX);
   checkTooltipContents(widget.tooltipDocument, {
     propertyName: NO_SYNTAX,
-    summary: "A summary of the property.",
+    summary: BASIC_EXPECTED_SUMMARY,
     syntax: ""
   });
 }
@@ -248,6 +250,3 @@ function checkTooltipContents(doc, expected) {
                  expected.syntax,
                  "Syntax is correct");
 }
-
-
-
