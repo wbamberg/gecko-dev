@@ -2,6 +2,26 @@
 /* Any copyright is dedicated to the Public Domain.
    http://creativecommons.org/publicdomain/zero/1.0/ */
 
+/**
+ * This file tests the MdnDocsWidget object, and specifically its
+ * loadCssDocs() function.
+ *
+ * The MdnDocsWidget is initialized with a document which has a specific
+ * structure. You then call loadCssDocs(), passing in a CSS property name.
+ * MdnDocsWidget then fetches docs for that property by making an XHR to
+ * a docs page, and loads the results into the document. While the XHR is
+ * still not resolved the document is put into an "initializing" state in
+ * which the devtools throbber is displayed.
+ *
+ * In this file we test:
+ * - the initial state of the document before the docs have loaded
+ * - the state of the document after the docs have loaded:
+ *   - in the normal case
+ *   - in various configurations including differently organized docs pages
+ *   and docs pages in which various elements are missing.
+ *   - the case where the property doesn't have a docs page at all
+ */
+
 "use strict";
 
 const {CssDocsTooltip} = require("devtools/shared/widgets/Tooltip");

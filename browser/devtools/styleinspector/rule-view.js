@@ -1249,8 +1249,7 @@ CssRuleView.prototype = {
     var showOrig = Services.prefs.getBoolPref(PREF_ORIG_SOURCES);
     this.menuitemSources.setAttribute("checked", showOrig);
 
-    this.menuitemShowMdnDocs.hidden = !this.doc.popupNode.parentNode
-                                      .classList.contains(PROPERTY_NAME_CLASS);
+    this.menuitemShowMdnDocs.hidden = !this._isPropertyNamePopup();
 
     this.menuitemAddRule.disabled = this.inspector.selection.isAnonymousNode();
   },
@@ -1344,6 +1343,15 @@ CssRuleView.prototype = {
 
     this._colorToCopy = container.dataset["color"];
     return true;
+  },
+
+  /**
+   * Returns true if the popup was opened with a context-click
+   * on a CSS property name, false otherwise.
+   */
+  _isPropertyNamePopup: function() {
+    let trigger = this.doc.popupNode;
+    return trigger.parentNode.classList.contains(PROPERTY_NAME_CLASS);
   },
 
   /**
