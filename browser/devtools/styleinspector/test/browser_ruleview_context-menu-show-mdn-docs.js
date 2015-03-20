@@ -1,15 +1,33 @@
 /* vim: set ft=javascript ts=2 et sw=2 tw=80: */
 /* Any copyright is dedicated to the Public Domain.
  http://creativecommons.org/publicdomain/zero/1.0/ */
+
+/**
+ * This file tests the code that integrates the Style Inspector's rule view
+ * with the MDN docs tooltip.
+ *
+ * If you display the context click on a property name in the rule view, you
+ * should see a menu item "Show MDN Docs". If you click that item, the MDN
+ * docs tooltip should be shown, containing docs from MDN for that property.
+ * 
+ * This file tests that:
+ * - the context menu item is shown when it should be shown and hidden when
+ * it should be hidden
+ * - clicking the context menu item shows the tooltip
+ * - pressing "Escape" while the tooltip is showing hides the tooltip
+ */
+
 "use strict";
 
-const {setBaseUrl, MdnDocsWidget} = devtools.require("devtools/shared/widgets/MdnDocsWidget");
+const {setBaseUrl} = devtools.require("devtools/shared/widgets/MdnDocsWidget");
+Cu.import("resource://gre/modules/Promise.jsm");
 
 const PROPERTYNAME_SELECTOR = ".ruleview-propertyname";
 const PROPERTYNAME = "color";
 
 add_task(function* () {
   // Test is slow on Linux EC2 instances - Bug 1137765
+  // ???
   requestLongerTimeout(2);
 
   const TEST_DOC = '<html>                                              \
@@ -25,35 +43,58 @@ add_task(function* () {
   let {inspector, view} = yield openRuleView();
   yield selectNode("div", inspector);
 
-  yield testIsContextMenuItemShownCorrectly(view);
+  yield testMdnContextMenuItemVisibility(view);
 
-  yield testShowMdnTooltip(view);
+  yield testShowAndHideMdnTooltip(view);
 
   yield clearCurrentNodeSelection(inspector);
 
 });
 
-function* testIsContextMenuItemShownCorrectly(view) {
-  info("Test that the function used to show/hide the 'Show MDN Docs' context menu item is correct.");
-
-  testIsPropertyNamePopupOnAllNodes(view);
-
-}
-
 /**
- * A function testing that _isPropertyNamePopup returns a correct value for all nodes
- * in the view.
+ * Test that the MDN context menu item is shown when it should be,
+ * and hidden when it should be.
+ *   - iterate through every node in the rule view
+ *   - set that node as popupNode (the node that the context menu
+ *   is shown for)
+ *   - update the context menu's state
+ *   - test that the MDN context menu item is hidden, or not,
+ *   depending on popupNode
  */
-function testIsPropertyNamePopupOnAllNodes(view) {
+function* testMdnContextMenuItemVisibility(view) {
+  info("Test that MDN context menu item is shown only when it should be.");
+
   let root = rootElement(view);
   for (let node of iterateNodes(root)) {
-    testIsPropertyNamePopupOnNode(view, node);
+    info("Setting " + node + " as popupNode");
+    if (view.doc) {
+      view.doc.popupNode = node;
+    }
+    else {
+      view.popupNode = node;
+    }
+
+    info("Updating context menu state");
+    view._contextMenuUpdate();
+    let isVisible = !view.menuitemShowMdnDocs.hidden;
+    let shouldBeVisible = isPropertyNameNode(node);
+    let message = shouldBeVisible? "shown": "hidden";
+    is(isVisible, shouldBeVisible,
+       "The MDN context menu item is " + message);
   }
 }
 
-function* testShowMdnTooltip(view) {
+/**
+ * Test that:
+ *  - the MDN tooltip is shown when we click the context menu item
+ *  - the tooltip's contents have been initialized (we don't fully
+ *  test this here, as it's fully tested with the tooltip test code)
+ *  - the tooltip is hidden when we press Escape
+ */
+function* testShowAndHideMdnTooltip(view) {
   setBaseUrl(TEST_URL_ROOT);
 
+  info("Setting the popupNode for the MDN docs tooltip");
   let root = rootElement(view);
   let propertyNameSpan = root.querySelector(PROPERTYNAME_SELECTOR);
   if (view.doc) {
@@ -61,42 +102,23 @@ function* testShowMdnTooltip(view) {
   }
 
   let cssDocs = view.tooltips.cssDocs;
-  ok(cssDocs, "The rule-view has the expected cssDocs property");
 
-  let cssDocsPanel = cssDocs.tooltip.panel;
-  ok(cssDocsPanel, "The XUL panel for the cssDocs tooltip exists");
-
+  info("Showing the MDN docs tooltip");
   let onShown = cssDocs.tooltip.once("shown");
-  view._onShowMdnDocs();
-  
+  view.menuitemShowMdnDocs.click();
   yield onShown;
-  ok(true, "The cssDocs tooltip was shown");
+  ok(true, "The MDN docs tooltip was shown");
 
+  info("Quick check that the tooltip contents are set");
   let tooltipDocument = cssDocs.tooltip.content.contentDocument;
   let h1 = tooltipDocument.getElementById("property-name");
-  is(PROPERTYNAME, h1.textContent, "The CSS docs tooltip h1 is correct");
-}
+  is(PROPERTYNAME, h1.textContent, "The MDN docs tooltip h1 is correct");
 
-/**
- * Test result of _isPropertyNamePopup with given node.
- * @param object view
- *               A CSSRuleView.
- * @param Node node
- *             A node to check.
- */
-function testIsPropertyNamePopupOnNode(view, node) {
-  info("Testing node " + node);
-  if (view.doc) {
-    view.doc.popupNode = node;
-  }
-  else {
-    view.popupNode = node;
-  }
-
-  let result = view._isPropertyNamePopup();
-  let correct = isPropertyNameNode(node);
-
-  is(result, correct, "_isPropertyNamePopup returned the expected value " + correct);
+  info("Simulate pressing the 'Escape' key");
+  let onHidden = cssDocs.tooltip.once("hidden");
+  EventUtils.sendKey("escape");
+  yield onHidden;
+  ok(true, "The MDN docs tooltip was hidden on pressing 'escape'");
 }
 
 /**
@@ -108,7 +130,7 @@ function isPropertyNameNode(node) {
 }
 
 /**
- * A generator that iterates recursively trough all child nodes of baseNode.
+ * A generator that iterates recursively through all child nodes of baseNode.
  */
 function* iterateNodes(baseNode) {
   yield baseNode;
