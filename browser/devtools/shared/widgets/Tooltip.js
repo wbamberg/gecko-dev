@@ -44,7 +44,6 @@ const MDN_DOCS_FRAME = "chrome://browser/content/devtools/mdn-docs-frame.xhtml";
 const ESCAPE_KEYCODE = Ci.nsIDOMKeyEvent.DOM_VK_ESCAPE;
 const RETURN_KEYCODE = Ci.nsIDOMKeyEvent.DOM_VK_RETURN;
 const POPUP_EVENTS = ["shown", "hidden", "showing", "hiding"];
-const BROWSER_WINDOW = 'navigator:browser';
 
 /**
  * Tooltip widget.
@@ -1549,16 +1548,6 @@ CssDocsTooltip.prototype = {
 
     this.widget.then(loadCssDocs);
     this.tooltip.show(anchor, "topcenter bottomleft");
-
-    let browserWindow = Services.wm.getMostRecentWindow(BROWSER_WINDOW);
-    let tooltip = this;
-
-    function hideOnTabSwitch() {
-      browserWindow.removeEventListener("TabSelect", hideOnTabSwitch, false);
-      tooltip.hide();
-    }
-
-    browserWindow.addEventListener("TabSelect", hideOnTabSwitch, false);
   },
 
   hide: function() {
