@@ -15,7 +15,7 @@
  *
  * - functions like getCssDocs that just fetch content from MDN,
  * without any constraints on what to do with the content. If you
- * don't want to embed the content in some custom way, use this.
+ * want to embed the content in some custom way, use this.
  *
  * - the MdnDocsWidget class, that manages and updates a tooltip
  * document whose content is taken from MDN. If you want to embed
@@ -28,10 +28,235 @@ const {Cc, Cu, Ci} = require("chrome");
 Cu.import("resource://gre/modules/Services.jsm");
 Cu.import("resource://gre/modules/Promise.jsm");
 
-// see https://developer.mozilla.org/en-US/docs/MDN/Kuma/API#Document_parameters
-const URL_POSTFIX = "?raw&macros";
-var BASE_MDN_PAGE = "https://developer.mozilla.org/docs/Web/CSS/";
+// for "?raw&macros&" see https://developer.mozilla.org/en-US/docs/MDN/Kuma/API#Document_parameters
+// the other parameters are so we know which MDN requests come from this feature
+const URL_POSTFIX = "?raw&macros&utm_source=mozilla&utm_medium=firefox-inspector&utm_campaign=default";
+var BASE_MDN_CSS_PAGE = "https://developer.mozilla.org/docs/Web/CSS/";
 const BROWSER_WINDOW = 'navigator:browser';
+
+/**
+ * Fetch an MDN page.
+ *
+ * @param {string} pageUrl
+ * URL of the page to fetch.
+ *
+ * @return {promise}
+ * The promise is resolved with the page as an XML document.
+ *
+ * The promise is rejected with an error message if
+ * we could not load the page.
+ */
+function getMdnPage(pageUrl) {
+  let deferred = Promise.defer();
+
+  let xhr = Cc["@mozilla.org/xmlextras/xmlhttprequest;1"].createInstance(Ci.nsIXMLHttpRequest);
+
+  xhr.addEventListener("load", onLoaded, false);
+  xhr.addEventListener("error", onError, false);
+
+  xhr.open("GET", pageUrl);
+  xhr.responseType = "document";
+  xhr.send();
+
+  function onLoaded(e) {
+    if (xhr.status != 200) {
+      deferred.reject({page: pageUrl, status: xhr.status});
+    }
+    else {
+      deferred.resolve(xhr.responseXML);
+    }
+  }
+
+  function onError(e) {
+    deferred.reject({page: pageUrl, status: xhr.status});
+  }
+
+  return deferred.promise;
+}
+
+/**
+ * Gets some docs for the given CSS property.
+ * Loads an MDN page for the property and gets some
+ * information about the property.
+ *
+ * @param {string} cssProperty
+ * The property for which we want docs.
+ *
+ * @return {promise}
+ * The promise is resolved with an object containing:
+ * - summary: a short summary of the property
+ * - syntax: some example syntax
+ *
+ * The promise is rejected with an error message if
+ * we could not load the page.
+ */
+function getCssDocs(cssProperty) {
+
+  let deferred = Promise.defer();
+  let pageUrl = makeCssDocsPageUrl(cssProperty) + URL_POSTFIX;
+
+  getMdnPage(pageUrl).then(parseDocsFromResponse, handleRejection);
+
+  function parseDocsFromResponse(responseDocument) {
+    let theDocs = {};
+    theDocs.summary = getSummary(responseDocument);
+    theDocs.syntax = getSyntax(responseDocument);
+    if (theDocs.summary || theDocs.syntax) {
+      deferred.resolve(theDocs);
+    }
+    else {
+      deferred.reject("Couldn't find the docs in the page.");
+    }
+  }
+
+  function handleRejection(e) {
+    deferred.reject(e.status);
+  }
+
+  return deferred.promise;
+}
+
+exports.getCssDocs = getCssDocs;
+
+/**
+ * The MdnDocsWidget is used by tooltip code that needs to display docs
+ * from MDN in a tooltip. The tooltip code loads a document that contains the
+ * basic structure of a docs tooltip (loaded from mdn-docs-frame.xhtml),
+ * and passes this document into the widget's constructor.
+ *
+ * In the constructor, the widget does some general setup that's not
+ * dependent on the particular item we need docs for.
+ *
+ * After that, when the tooltip code needs to display docs for an item, it
+ * asks the widget to retrieve the docs and update the document with them.
+ *
+ * @param {Document} tooltipDocument
+ * A DOM document. The widget expects the document to have a particular
+ * structure.
+ */
+function MdnDocsWidget(tooltipDocument) {
+
+  // fetch all the bits of the document that we will manipulate later
+  this.docElements = {
+    heading: tooltipDocument.getElementById("property-name"),
+    summary: tooltipDocument.getElementById("summary"),
+    syntax: tooltipDocument.getElementById("syntax"),
+    info: tooltipDocument.getElementById("property-info"),
+    linkToMdn: tooltipDocument.getElementById("visit-mdn-page")
+  };
+
+  // get the localized string for the link text
+  this.docElements.linkToMdn.textContent =
+    l10n.strings.GetStringFromName("docsTooltip.visitMDN");
+
+  // listen for clicks and open in the browser window instead
+  let browserWindow = Services.wm.getMostRecentWindow(BROWSER_WINDOW);
+  this.docElements.linkToMdn.addEventListener("click", function(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    let link = e.target.href;
+    browserWindow.gBrowser.addTab(link);
+  });
+}
+
+exports.MdnDocsWidget = MdnDocsWidget;
+
+MdnDocsWidget.prototype = {
+  /**
+   * This is called just before the tooltip is displayed, and is
+   * passed the CSS property for which we want to display help.
+   *
+   * Its job is to make sure the document contains the docs
+   * content for that CSS property.
+   *
+   * First, it initializes the document, setting the things it can
+   * set synchronously, resetting the things it needs to get
+   * asynchronously, and making sure the throbber is throbbing.
+   *
+   * Then it tries to get the content asynchronously, updating
+   * the document with the content or with an error message.
+   *
+   * It returns immediately, so the caller can display the tooltip
+   * without waiting for the asynch operation to complete.
+   *
+   * @param {string} propertyName
+   * The name of the CSS property for which we need to display help.
+   */
+  loadCssDocs: function(propertyName) {
+
+    /**
+     * Do all the setup we can do synchronously, and get the document in
+     * a state where it can be displayed while we are waiting for the
+     * MDN docs content to be retrieved.
+     */
+    function initializeDocument(propertyName) {
+      // set property name heading
+      docElements.heading.textContent = propertyName;
+
+      // set link target
+      docElements.linkToMdn.setAttribute("href", makeCssDocsPageUrl(propertyName));
+
+      // clear docs summary and syntax
+      docElements.summary.textContent = "";
+      docElements.syntax.textContent = "";
+
+      // show the throbber
+      docElements.info.classList.add("devtools-throbber");
+    }
+
+    /**
+     * This is called if we successfully got the docs content.
+     * Finishes setting up the tooltip content, and disables the throbber.
+     */
+    function finalizeDocument({summary, syntax}) {
+      // set docs summary and syntax
+      docElements.summary.textContent = summary;
+      docElements.syntax.textContent = syntax;
+
+      // hide the throbber
+      docElements.info.classList.remove("devtools-throbber");
+
+      deferred.resolve(this);
+    }
+
+    /**
+     * This is called if we failed to get the docs content.
+     * Sets the content to contain an error message, and disables the throbber.
+     */
+    function gotError(error) {
+      // show error message
+      docElements.summary.textContent = l10n.strings.GetStringFromName("docsTooltip.loadDocsError");
+
+      // hide the throbber
+      docElements.info.classList.remove("devtools-throbber");
+
+      // although gotError is called when there's an error, we have handled
+      // the error, so call resolve not reject.
+      deferred.resolve(this);
+    }
+
+    let deferred = Promise.defer();
+    let docElements = this.docElements;
+
+    initializeDocument(propertyName);
+    getCssDocs(propertyName).then(finalizeDocument, gotError);
+
+    return deferred.promise;
+  }
+}
+
+/**
+ * L10N utility class
+ */
+function L10N() {}
+L10N.prototype = {};
+
+let l10n = new L10N();
+
+loader.lazyGetter(L10N.prototype, "strings", () => {
+  return Services.strings.createBundle(
+    "chrome://browser/locale/devtools/inspector.properties");
+});
 
 /**
  * Test whether a node is all whitespace.
@@ -159,240 +384,20 @@ function getSyntax(mdnDocument) {
 }
 
 /**
- * Fetch an MDN page.
- *
- * @param {string} pageUrl
- * URL of the page to fetch.
- *
- * @return {promise}
- * The promise is resolved with the page as an XML document.
- *
- * The promise is rejected with an error message if
- * we could not load the page.
- */
-function getMdnPage(pageUrl) {
-  let deferred = Promise.defer();
-
-  let xhr = Cc["@mozilla.org/xmlextras/xmlhttprequest;1"].createInstance(Ci.nsIXMLHttpRequest);
-
-  xhr.addEventListener("load", onLoaded, false);
-  xhr.addEventListener("error", onError, false);
-
-  xhr.open("GET", pageUrl);
-  xhr.responseType = "document";
-  xhr.send();
-
-  function onLoaded(e) {
-    if (xhr.status != 200) {
-      deferred.reject({page: pageUrl, status: xhr.status});
-    }
-    else {
-      deferred.resolve(xhr.responseXML);
-    }
-  }
-
-  function onError(e) {
-    deferred.reject({page: pageUrl, status: xhr.status});
-  }
-
-  return deferred.promise;
-}
-
-function makeDocsPageUrl(propertyName) {
-  return BASE_MDN_PAGE + propertyName;
-}
-
-/**
- * Use a different URL for MDN pages. Used only for testing.
+ * Use a different URL for CSS docs pages. Used only for testing.
  *
  * @param {string} baseUrl
  * The baseURL to use.
  */
-function setBaseUrl(baseUrl) {
-  BASE_MDN_PAGE = baseUrl;
+function setBaseCssDocsUrl(baseUrl) {
+  BASE_MDN_CSS_PAGE = baseUrl;
 }
+
+exports.setBaseCssDocsUrl = setBaseCssDocsUrl;
 
 /**
- * Gets some docs for the given CSS property.
- * Loads an MDN page for the property and gets some
- * information about the property.
- *
- * @param {string} cssProperty
- * The property for which we want docs.
- *
- * @return {promise}
- * The promise is resolved with an object containing:
- * - summary: a short summary of the property
- * - syntax: some example syntax
- *
- * The promise is rejected with an error message if
- * we could not load the page.
+ * Construct the URL to get the CSS docs from.
  */
-function getCssDocs(cssProperty) {
-  let deferred = Promise.defer();
-  let pageUrl = makeDocsPageUrl(cssProperty) + URL_POSTFIX;
-
-  getMdnPage(pageUrl).then(parseDocsFromResponse, handleRejection);
-
-  function parseDocsFromResponse(responseDocument) {
-    let theDocs = {};
-    theDocs.summary = getSummary(responseDocument);
-    theDocs.syntax = getSyntax(responseDocument);
-    deferred.resolve(theDocs);
-  }
-
-  function handleRejection(e) {
-    deferred.reject(e.status);
-  }
-
-  return deferred.promise;
+function makeCssDocsPageUrl(propertyName) {
+  return BASE_MDN_CSS_PAGE + propertyName;
 }
-
-/**
- * The MdnDocsWidget is used by tooltip code that needs to display docs
- * from MDN in a tooltip. The tooltip code loads a document that contains the
- * basic structure of a docs tooltip (loaded from mdn-docs-frame.xhtml),
- * and passes this document into the widget's constructor.
- *
- * In the constructor, the widget does some general setup that's not
- * dependent on the particular item we need docs for.
- *
- * After that, when the tooltip code needs to display docs for an item, it
- * asks the widget to retrieve the docs and update the document with them.
- *
- * @param {Document} tooltipDocument
- * A DOM document. The widget expects the document to have a particular
- * structure.
- */
-function MdnDocsWidget(tooltipDocument) {
-  this.tooltipDocument = tooltipDocument;
-
-  // get the localized string for the link text
-  let linkToMdn = tooltipDocument.getElementById("visit-mdn-page");
-  linkToMdn.textContent = l10n.strings.GetStringFromName("docsTooltip.visitMDN");
-
-  // listen for clicks and open in the browser window instead
-  let browserWindow = Services.wm.getMostRecentWindow(BROWSER_WINDOW);
-  linkToMdn.addEventListener("click", function(e) {
-    e.stopPropagation();
-    e.preventDefault();
-    let link = e.target.href;
-    browserWindow.gBrowser.addTab(link);
-  });
-}
-
-MdnDocsWidget.prototype = {
-  /**
-   * This is called just before the tooltip is displayed, and is
-   * passed the CSS property for which we want to display help.
-   *
-   * Its job is to make sure the document contains the docs
-   * content for that CSS property.
-   *
-   * First, it initializes the document, setting the things it can
-   * set synchronously, resetting the things it needs to get
-   * asynchronously, and making sure the throbber is throbbing.
-   *
-   * Then it tries to get the content asynchronously, updating
-   * the document with the content or with an error message.
-   *
-   * It returns immediately, so the caller can display the tooltip
-   * without waiting for the asynch operation to complete.
-   *
-   * @param {string} propertyName
-   * The name of the CSS property for which we need to display help.
-   */
-  loadCssDocs: function(propertyName) {
-
-    /**
-     * Do all the setup we can do synchronously, and get the document in
-     * a state where it can be displayed while we are waiting for the
-     * MDN docs content to be retrieved.
-     */
-    function initializeDocument(propertyName) {
-      // set property name heading
-      let propertyNameHeading = tooltipDocument.getElementById("property-name");
-      propertyNameHeading.textContent = propertyName;
-
-      // set link target
-      let mdnLink = tooltipDocument.getElementById("visit-mdn-page");
-      mdnLink.setAttribute("href", makeDocsPageUrl(propertyName));
-
-      // clear docs summary and syntax
-      let propertySummary = tooltipDocument.getElementById("summary");
-      propertySummary.textContent = "";
-
-      let propertySyntax = tooltipDocument.getElementById("syntax");
-      propertySyntax.textContent = "";
-
-      // show the throbber
-      let propertyInfo = tooltipDocument.getElementById("property-info");
-      propertyInfo.classList.add("devtools-throbber");
-    }
-
-    /**
-     * This is called if we successfully got the docs content.
-     * Finishes setting up the tooltip content, and disables the throbber.
-     */
-    function finalizeDocument({summary, syntax}) {
-      // set docs summary and syntax
-      let propertySummary = tooltipDocument.getElementById("summary");
-      propertySummary.textContent = summary;
-
-      // populate property syntax section
-      let propertySyntaxSection = tooltipDocument.getElementById("syntax");
-      propertySyntaxSection.textContent = syntax;
-
-      // hide the throbber
-      let propertyInfo = tooltipDocument.getElementById("property-info");
-      propertyInfo.classList.remove("devtools-throbber");
-
-      deferred.resolve(this);
-    }
-
-    /**
-     * This is called if we failed to get the docs content.
-     * Sets the content to contain an error message, and disables the throbber.
-     */
-    function gotError(error) {
-      let propertyNameHeading = tooltipDocument.getElementById("property-name");
-      propertyNameHeading.textContent = propertyName;
-
-      let propertySummary = tooltipDocument.getElementById("summary");
-      propertySummary.textContent = l10n.strings.GetStringFromName("docsTooltip.loadDocsError");
-
-      // hide the throbber
-      let propertyInfo = tooltipDocument.getElementById("property-info");
-      propertyInfo.classList.remove("devtools-throbber");
-
-      // although gotError is called when there's an error, we have handled
-      // the error, so call resolve not reject.
-      deferred.resolve(this);
-    }
-
-    let deferred = Promise.defer();
-    let tooltipDocument = this.tooltipDocument;
-
-    initializeDocument(propertyName);
-    getCssDocs(propertyName).then(finalizeDocument, gotError);
-
-    return deferred.promise;
-  }
-}
-
-/**
- * L10N utility class
- */
-function L10N() {}
-L10N.prototype = {};
-
-let l10n = new L10N();
-
-loader.lazyGetter(L10N.prototype, "strings", () => {
-  return Services.strings.createBundle(
-    "chrome://browser/locale/devtools/inspector.properties");
-});
-
-exports.setBaseUrl = setBaseUrl;
-exports.getCssDocs = getCssDocs;
-exports.MdnDocsWidget = MdnDocsWidget;

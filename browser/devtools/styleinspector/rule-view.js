@@ -24,7 +24,6 @@ const HTML_NS = "http://www.w3.org/1999/xhtml";
 const XUL_NS = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
 const PREF_UA_STYLES = "devtools.inspector.showUserAgentStyles";
 const PREF_DEFAULT_COLOR_UNIT = "devtools.defaultColorUnit";
-
 const PROPERTY_NAME_CLASS = "ruleview-propertyname";
 
 /**
@@ -1249,7 +1248,10 @@ CssRuleView.prototype = {
     var showOrig = Services.prefs.getBoolPref(PREF_ORIG_SOURCES);
     this.menuitemSources.setAttribute("checked", showOrig);
 
-    this.menuitemShowMdnDocs.hidden = !this._isPropertyNamePopup();
+    this.ctxMenuNodeInfo = this.getNodeInfo(this.doc.popupNode.parentNode);
+
+    this.menuitemShowMdnDocs.hidden = !this.ctxMenuNodeInfo ||
+                                      this.ctxMenuNodeInfo.type !== overlays.VIEW_NODE_PROPERTY_TYPE;
 
     this.menuitemAddRule.disabled = this.inspector.selection.isAnonymousNode();
   },
@@ -1346,15 +1348,6 @@ CssRuleView.prototype = {
   },
 
   /**
-   * Returns true if the popup was opened with a context-click
-   * on a CSS property name, false otherwise.
-   */
-  _isPropertyNamePopup: function() {
-    let trigger = this.doc.popupNode;
-    return trigger.parentNode.classList.contains(PROPERTY_NAME_CLASS);
-  },
-
-  /**
    * Select all text.
    */
   _onSelectAll: function() {
@@ -1425,7 +1418,11 @@ CssRuleView.prototype = {
    *  Show docs from MDN for a CSS property.
    */
   _onShowMdnDocs: function() {
-    let cssPropertyName = this.doc.popupNode.textContent;
+    if (!this.ctxMenuNodeInfo) {
+      return;
+    }
+
+    let cssPropertyName = this.ctxMenuNodeInfo.value.property;
     let anchor = this.doc.popupNode.parentNode;
     let cssDocsTooltip = this.tooltips.cssDocs;
     cssDocsTooltip.show(anchor, cssPropertyName);

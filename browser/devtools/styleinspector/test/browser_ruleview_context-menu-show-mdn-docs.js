@@ -19,7 +19,7 @@
 
 "use strict";
 
-const {setBaseUrl} = devtools.require("devtools/shared/widgets/MdnDocsWidget");
+const {setBaseCssDocsUrl} = devtools.require("devtools/shared/widgets/MdnDocsWidget");
 Cu.import("resource://gre/modules/Promise.jsm");
 
 const PROPERTYNAME_SELECTOR = ".ruleview-propertyname";
@@ -92,7 +92,7 @@ function* testMdnContextMenuItemVisibility(view) {
  *  - the tooltip is hidden when we press Escape
  */
 function* testShowAndHideMdnTooltip(view) {
-  setBaseUrl(TEST_URL_ROOT);
+  setBaseCssDocsUrl(TEST_URL_ROOT);
 
   info("Setting the popupNode for the MDN docs tooltip");
   let root = rootElement(view);
@@ -100,6 +100,7 @@ function* testShowAndHideMdnTooltip(view) {
   if (view.doc) {
     view.doc.popupNode = propertyNameSpan.firstChild;
   }
+  view._contextMenuUpdate();
 
   let cssDocs = view.tooltips.cssDocs;
 

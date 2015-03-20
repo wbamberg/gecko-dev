@@ -25,7 +25,7 @@
 "use strict";
 
 const {CssDocsTooltip} = require("devtools/shared/widgets/Tooltip");
-const {setBaseUrl, MdnDocsWidget} = devtools.require("devtools/shared/widgets/MdnDocsWidget");
+const {setBaseCssDocsUrl, MdnDocsWidget} = devtools.require("devtools/shared/widgets/MdnDocsWidget");
 
 const {Cc, Cu, Ci} = require("chrome");
 Cu.import("resource://gre/modules/Promise.jsm");
@@ -51,9 +51,10 @@ const NO_SUMMARY_OR_SYNTAX = "html-mdn-css-no-summary-or-syntax.html";
 
 const BASIC_EXPECTED_SUMMARY = "A summary of the property.";
 const BASIC_EXPECTED_SYNTAX = "/* The part we want   */\nthis: is-the-part-we-want";
+const ERROR_MESSAGE = "Could not load docs page.";
 
 add_task(function*() {
-  setBaseUrl(TEST_URI_ROOT);
+  setBaseCssDocsUrl(TEST_URI_ROOT);
 
   yield promiseTab("about:blank");
   let [host, win, doc] = yield createHost("bottom", MDN_DOCS_TOOLTIP_FRAME);
@@ -189,7 +190,7 @@ function* testNonExistentPage(widget) {
   yield widget.loadCssDocs("i-dont-exist.html");
   checkTooltipContents(widget.tooltipDocument, {
     propertyName: "i-dont-exist.html",
-    summary: "Could not load docs page.",
+    summary: ERROR_MESSAGE,
     syntax: ""
   });
 }
@@ -229,7 +230,7 @@ function* testNoSummaryOrSyntax(widget) {
   yield widget.loadCssDocs(NO_SUMMARY_OR_SYNTAX);
   checkTooltipContents(widget.tooltipDocument, {
     propertyName: NO_SUMMARY_OR_SYNTAX,
-    summary: "",
+    summary: ERROR_MESSAGE,
     syntax: ""
   });
 }
