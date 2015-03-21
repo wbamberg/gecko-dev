@@ -78,10 +78,6 @@ add_task(function*() {
   // test a page without summary or syntax
   yield testNoSummaryOrSyntax(widget);
 
-  //info("Destroying the widget");
-  //w.destroy();
-  //is(container.children.length, 0, "All nodes have been removed");
-
   host.destroy();
   gBrowser.removeCurrentTab();
 
