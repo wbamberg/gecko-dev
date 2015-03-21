@@ -97,7 +97,7 @@ add_task(function*() {
  */
 function* testTheBasics(widget) {
   info("Test all the basic functionality in the widget");
-  let doc = widget.tooltipDocument;
+  let doc = widget.docElements;
 
   info("Get the widget state before docs have loaded");
   let promise = widget.loadCssDocs(BASIC_TESTING_PROPERTY);
@@ -110,7 +110,7 @@ function* testTheBasics(widget) {
   });
 
   // throbber is set
-  checkNodeHasClass(doc, "#property-info", "devtools-throbber", "Throbber is set");
+  ok(doc.info.classList.contains("devtools-throbber"), "Throbber is set");
 
   info("Now let the widget finish loading");
   yield promise;
@@ -123,13 +123,13 @@ function* testTheBasics(widget) {
   });
 
   // throbber is gone
-  checkNodeHasNotClass(doc, "#property-info", "devtools-throbber", "Throbber is not set");
+  ok(!doc.info.classList.contains("devtools-throbber"), "Throbber is not set");
 
   info("Check that MDN link text is correct and onclick behavior is correct");
   yield checkMdnLink(BASIC_TESTING_PROPERTY, widget);
 
   function* checkMdnLink(testProperty, widget) {
-    let mdnLink = widget.tooltipDocument.querySelector("#visit-mdn-page");
+    let mdnLink = widget.docElements.linkToMdn;
     is(mdnLink.href, TEST_URI_ROOT + testProperty, "MDN link href is correct");
 
     let uri = yield checkLinkClick(mdnLink);
@@ -188,7 +188,7 @@ function* testTheBasics(widget) {
 function* testNonExistentPage(widget) {
   info("Test a property for which we don't have a page");
   yield widget.loadCssDocs("i-dont-exist.html");
-  checkTooltipContents(widget.tooltipDocument, {
+  checkTooltipContents(widget.docElements, {
     propertyName: "i-dont-exist.html",
     summary: ERROR_MESSAGE,
     syntax: ""
@@ -198,7 +198,7 @@ function* testNonExistentPage(widget) {
 function* testSyntaxById(widget) {
   info("Test a property whose syntax section is specified using an ID");
   yield widget.loadCssDocs(SYNTAX_BY_ID);
-  checkTooltipContents(widget.tooltipDocument, {
+  checkTooltipContents(widget.docElements, {
     propertyName: SYNTAX_BY_ID,
     summary: BASIC_EXPECTED_SUMMARY,
     syntax: BASIC_EXPECTED_SYNTAX
@@ -208,7 +208,7 @@ function* testSyntaxById(widget) {
 function* testNoSummary(widget) {
   info("Test a property whose page doesn't have a summary");
   yield widget.loadCssDocs(NO_SUMMARY);
-  checkTooltipContents(widget.tooltipDocument, {
+  checkTooltipContents(widget.docElements, {
     propertyName: NO_SUMMARY,
     summary: "",
     syntax: BASIC_EXPECTED_SYNTAX
@@ -218,7 +218,7 @@ function* testNoSummary(widget) {
 function* testNoSyntax(widget) {
   info("Test a property whose page doesn't have a syntax");
   yield widget.loadCssDocs(NO_SYNTAX);
-  checkTooltipContents(widget.tooltipDocument, {
+  checkTooltipContents(widget.docElements, {
     propertyName: NO_SYNTAX,
     summary: BASIC_EXPECTED_SUMMARY,
     syntax: ""
@@ -228,7 +228,7 @@ function* testNoSyntax(widget) {
 function* testNoSummaryOrSyntax(widget) {
   info("Test a property whose page doesn't have a summary or a syntax");
   yield widget.loadCssDocs(NO_SUMMARY_OR_SYNTAX);
-  checkTooltipContents(widget.tooltipDocument, {
+  checkTooltipContents(widget.docElements, {
     propertyName: NO_SUMMARY_OR_SYNTAX,
     summary: ERROR_MESSAGE,
     syntax: ""
@@ -239,35 +239,17 @@ function* testNoSummaryOrSyntax(widget) {
  * Utility functions to check content of the tooltip.
  */
 
-function checkNodeValue(doc, id, expected, message) {
-  let node = doc.querySelector(id);
-  is(node.textContent, expected, message);
-}
-
-function checkNodeHasClass(doc, id, className, message) {
-  let node = doc.querySelector(id);
-  ok(node.classList.contains(className), message);
-}
-
-function checkNodeHasNotClass(doc, id, className, message) {
-  let node = doc.querySelector(id);
-  ok(!node.classList.contains(className), message);
-}
-
 function checkTooltipContents(doc, expected) {
 
-  checkNodeValue(doc,
-                 "#property-name",
-                 expected.propertyName,
-                 "Property name is correct");
+  is(doc.heading.textContent,
+     expected.propertyName,
+     "Property name is correct");
 
-  checkNodeValue(doc, 
-                 "#summary",
-                 expected.summary,
-                 "Summary is correct");
+  is(doc.summary.textContent,
+     expected.summary,
+     "Summary is correct");
 
-  checkNodeValue(doc, 
-                 "#syntax",
-                 expected.syntax,
-                 "Syntax is correct");
+  is(doc.syntax.textContent,
+     expected.syntax,
+     "Syntax is correct");
 }
