@@ -9,7 +9,7 @@
  * If you display the context click on a property name in the rule view, you
  * should see a menu item "Show MDN Docs". If you click that item, the MDN
  * docs tooltip should be shown, containing docs from MDN for that property.
- * 
+ *
  * This file tests that:
  * - the context menu item is shown when it should be shown and hidden when
  * it should be hidden
@@ -26,9 +26,6 @@ const PROPERTYNAME_SELECTOR = ".ruleview-propertyname";
 const PROPERTYNAME = "color";
 
 add_task(function* () {
-  // Test is slow on Linux EC2 instances - Bug 1137765
-  // ???
-  requestLongerTimeout(2);
 
   const TEST_DOC = '<html>                                              \
                       <body>                                            \
