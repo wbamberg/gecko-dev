@@ -137,7 +137,7 @@ exports.getCssDocs = getCssDocs;
 function MdnDocsWidget(tooltipDocument) {
 
   // fetch all the bits of the document that we will manipulate later
-  this.docElements = {
+  this.elements = {
     heading: tooltipDocument.getElementById("property-name"),
     summary: tooltipDocument.getElementById("summary"),
     syntax: tooltipDocument.getElementById("syntax"),
@@ -146,12 +146,12 @@ function MdnDocsWidget(tooltipDocument) {
   };
 
   // get the localized string for the link text
-  this.docElements.linkToMdn.textContent =
+  this.elements.linkToMdn.textContent =
     l10n.strings.GetStringFromName("docsTooltip.visitMDN");
 
   // listen for clicks and open in the browser window instead
   let browserWindow = Services.wm.getMostRecentWindow(BROWSER_WINDOW);
-  this.docElements.linkToMdn.addEventListener("click", function(e) {
+  this.elements.linkToMdn.addEventListener("click", function(e) {
     e.stopPropagation();
     e.preventDefault();
     let link = e.target.href;
@@ -191,17 +191,17 @@ MdnDocsWidget.prototype = {
      */
     function initializeDocument(propertyName) {
       // set property name heading
-      docElements.heading.textContent = propertyName;
+      elements.heading.textContent = propertyName;
 
       // set link target
-      docElements.linkToMdn.setAttribute("href", makeCssDocsPageUrl(propertyName));
+      elements.linkToMdn.setAttribute("href", makeCssDocsPageUrl(propertyName));
 
       // clear docs summary and syntax
-      docElements.summary.textContent = "";
-      docElements.syntax.textContent = "";
+      elements.summary.textContent = "";
+      elements.syntax.textContent = "";
 
       // show the throbber
-      docElements.info.classList.add("devtools-throbber");
+      elements.info.classList.add("devtools-throbber");
     }
 
     /**
@@ -210,11 +210,11 @@ MdnDocsWidget.prototype = {
      */
     function finalizeDocument({summary, syntax}) {
       // set docs summary and syntax
-      docElements.summary.textContent = summary;
-      docElements.syntax.textContent = syntax;
+      elements.summary.textContent = summary;
+      elements.syntax.textContent = syntax;
 
       // hide the throbber
-      docElements.info.classList.remove("devtools-throbber");
+      elements.info.classList.remove("devtools-throbber");
 
       deferred.resolve(this);
     }
@@ -225,10 +225,10 @@ MdnDocsWidget.prototype = {
      */
     function gotError(error) {
       // show error message
-      docElements.summary.textContent = l10n.strings.GetStringFromName("docsTooltip.loadDocsError");
+      elements.summary.textContent = l10n.strings.GetStringFromName("docsTooltip.loadDocsError");
 
       // hide the throbber
-      docElements.info.classList.remove("devtools-throbber");
+      elements.info.classList.remove("devtools-throbber");
 
       // although gotError is called when there's an error, we have handled
       // the error, so call resolve not reject.
@@ -236,7 +236,7 @@ MdnDocsWidget.prototype = {
     }
 
     let deferred = Promise.defer();
-    let docElements = this.docElements;
+    let elements = this.elements;
 
     initializeDocument(propertyName);
     getCssDocs(propertyName).then(finalizeDocument, gotError);
