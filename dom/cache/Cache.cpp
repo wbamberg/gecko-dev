@@ -14,6 +14,7 @@
 #include "mozilla/dom/CacheBinding.h"
 #include "mozilla/dom/cache/AutoUtils.h"
 #include "mozilla/dom/cache/CacheChild.h"
+#include "mozilla/dom/cache/CachePushStreamChild.h"
 #include "mozilla/dom/cache/ReadStream.h"
 #include "mozilla/dom/cache/TypeUtils.h"
 #include "mozilla/ErrorResult.h"
@@ -92,6 +93,7 @@ NS_IMPL_CYCLE_COLLECTION_TRACE_WRAPPERCACHE(mozilla::dom::cache::Cache)
 
 NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION(Cache)
   NS_WRAPPERCACHE_INTERFACE_MAP_ENTRY
+  NS_INTERFACE_MAP_ENTRY(nsISupports)
 NS_INTERFACE_MAP_END
 
 Cache::Cache(nsIGlobalObject* aGlobal, CacheChild* aActor)
@@ -525,6 +527,18 @@ Cache::AssertOwningThread() const
   NS_ASSERT_OWNINGTHREAD(Cache);
 }
 #endif
+
+CachePushStreamChild*
+Cache::CreatePushStream(nsIAsyncInputStream* aStream)
+{
+  NS_ASSERT_OWNINGTHREAD(Cache);
+  MOZ_ASSERT(mActor);
+  MOZ_ASSERT(aStream);
+  auto actor = mActor->SendPCachePushStreamConstructor(
+    new CachePushStreamChild(mActor->GetFeature(), aStream));
+  MOZ_ASSERT(actor);
+  return static_cast<CachePushStreamChild*>(actor);
+}
 
 void
 Cache::ResolvedCallback(JSContext* aCx, JS::Handle<JS::Value> aValue)

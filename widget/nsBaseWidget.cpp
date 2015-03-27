@@ -924,7 +924,7 @@ public:
     : mTreeManager(aTreeManager)
   {}
 
-  void Run(uint64_t aInputBlockId, const nsTArray<ScrollableLayerGuid>& aTargets) const MOZ_OVERRIDE {
+  void Run(uint64_t aInputBlockId, const nsTArray<ScrollableLayerGuid>& aTargets) const override {
     MOZ_ASSERT(NS_IsMainThread());
     // need a local var to disambiguate between the SetTargetAPZC overloads.
     void (APZCTreeManager::*setTargetApzcFunc)(uint64_t, const nsTArray<ScrollableLayerGuid>&)
@@ -943,7 +943,7 @@ public:
     : mTreeManager(aTreeManager)
   {}
 
-  void Run(uint64_t aInputBlockId, const nsTArray<TouchBehaviorFlags>& aFlags) const MOZ_OVERRIDE {
+  void Run(uint64_t aInputBlockId, const nsTArray<TouchBehaviorFlags>& aFlags) const override {
     MOZ_ASSERT(NS_IsMainThread());
     APZThreadUtils::RunOnControllerThread(NewRunnableMethod(
         mTreeManager.get(), &APZCTreeManager::SetAllowedTouchBehavior,
@@ -960,7 +960,7 @@ public:
     : mTreeManager(aTreeManager)
   {}
 
-  void Run(const ScrollableLayerGuid& aGuid, uint64_t aInputBlockId, bool aPreventDefault) const MOZ_OVERRIDE {
+  void Run(const ScrollableLayerGuid& aGuid, uint64_t aInputBlockId, bool aPreventDefault) const override {
     MOZ_ASSERT(NS_IsMainThread());
     APZThreadUtils::RunOnControllerThread(NewRunnableMethod(
         mTreeManager.get(), &APZCTreeManager::ContentReceivedInputBlock,
@@ -993,7 +993,8 @@ void nsBaseWidget::ConfigureAPZCTreeManager()
 nsEventStatus
 nsBaseWidget::ProcessUntransformedAPZEvent(WidgetInputEvent* aEvent,
                                            const ScrollableLayerGuid& aGuid,
-                                           uint64_t aInputBlockId)
+                                           uint64_t aInputBlockId,
+                                           nsEventStatus aApzResponse)
 {
   MOZ_ASSERT(NS_IsMainThread());
   InputAPZContext context(aGuid, aInputBlockId);
@@ -1026,7 +1027,7 @@ nsBaseWidget::ProcessUntransformedAPZEvent(WidgetInputEvent* aEvent,
         APZCCallbackHelper::SendSetTargetAPZCNotification(this, GetDocument(), *aEvent,
             aGuid, aInputBlockId, mSetTargetAPZCCallback);
       }
-      mAPZEventState->ProcessTouchEvent(*touchEvent, aGuid, aInputBlockId);
+      mAPZEventState->ProcessTouchEvent(*touchEvent, aGuid, aInputBlockId, aApzResponse);
     } else if (WidgetWheelEvent* wheelEvent = aEvent->AsWheelEvent()) {
       APZCCallbackHelper::SendSetTargetAPZCNotification(this, GetDocument(), *aEvent,
                 aGuid, aInputBlockId, mSetTargetAPZCCallback);
@@ -1063,7 +1064,7 @@ nsBaseWidget::DispatchAPZAwareEvent(WidgetInputEvent* aEvent)
     if (result == nsEventStatus_eConsumeNoDefault) {
         return result;
     }
-    return ProcessUntransformedAPZEvent(aEvent, guid, inputBlockId);
+    return ProcessUntransformedAPZEvent(aEvent, guid, inputBlockId, result);
   }
 
   nsEventStatus status;
@@ -2023,7 +2024,7 @@ static void debug_SetCachedBoolPref(const char * aPrefName,bool aValue)
 }
 
 //////////////////////////////////////////////////////////////
-class Debug_PrefObserver MOZ_FINAL : public nsIObserver {
+class Debug_PrefObserver final : public nsIObserver {
     ~Debug_PrefObserver() {}
 
   public:

@@ -55,6 +55,7 @@ NS_IMPL_CYCLE_COLLECTION_TRACE_WRAPPERCACHE(mozilla::dom::cache::CacheStorage)
 
 NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION(CacheStorage)
   NS_WRAPPERCACHE_INTERFACE_MAP_ENTRY
+  NS_INTERFACE_MAP_ENTRY_AMBIGUOUS(nsISupports, nsIIPCBackgroundChildCreateCallback)
   NS_INTERFACE_MAP_ENTRY(nsIIPCBackgroundChildCreateCallback)
 NS_INTERFACE_MAP_END
 
@@ -515,6 +516,13 @@ CacheStorage::AssertOwningThread() const
   NS_ASSERT_OWNINGTHREAD(CacheStorage);
 }
 #endif
+
+CachePushStreamChild*
+CacheStorage::CreatePushStream(nsIAsyncInputStream* aStream)
+{
+  // This is true because CacheStorage always uses IgnoreBody for requests.
+  MOZ_CRASH("CacheStorage should never create a push stream.");
+}
 
 void
 CacheStorage::ResolvedCallback(JSContext* aCx, JS::Handle<JS::Value> aValue)

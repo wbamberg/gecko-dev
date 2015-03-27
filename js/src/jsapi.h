@@ -805,7 +805,7 @@ namespace JS {
 //    JS::SourceBufferHolder srcBuf(chars, length, JS::SourceBufferHolder::GiveOwnership);
 //    JS::Compile(cx, options, srcBuf);
 //
-class MOZ_STACK_CLASS SourceBufferHolder MOZ_FINAL
+class MOZ_STACK_CLASS SourceBufferHolder final
 {
   public:
     enum Ownership {
@@ -896,7 +896,7 @@ class MOZ_STACK_CLASS SourceBufferHolder MOZ_FINAL
                                            set of the same-named property in an
                                            object that delegates to a prototype
                                            containing this property */
-#define JSPROP_INDEX            0x80    /* name is actually (int) index */
+#define JSPROP_INTERNAL_USE_BIT 0x80    /* internal JS engine use only */
 #define JSPROP_DEFINE_LATE     0x100    /* Don't define property when initially creating
                                            the constructor. Some objects like Function/Object
                                            have self-hosted functions that can only be defined
@@ -1488,8 +1488,7 @@ typedef void (*JSIterateCompartmentCallback)(JSRuntime *rt, void *data, JSCompar
 /*
  * This function calls |compartmentCallback| on every compartment. Beware that
  * there is no guarantee that the compartment will survive after the callback
- * returns. Also, if the callback can GC, there is no guarantee that every
- * compartment will be visited.
+ * returns.
  */
 extern JS_PUBLIC_API(void)
 JS_IterateCompartments(JSRuntime *rt, void *data,
@@ -1724,9 +1723,6 @@ JS_AddFinalizeCallback(JSRuntime *rt, JSFinalizeCallback cb, void *data);
 
 extern JS_PUBLIC_API(void)
 JS_RemoveFinalizeCallback(JSRuntime *rt, JSFinalizeCallback cb);
-
-extern JS_PUBLIC_API(bool)
-JS_IsGCMarkingTracer(JSTracer *trc);
 
 /*
  * Weak pointers and garbage collection
@@ -2023,9 +2019,9 @@ typedef struct JSNativeWrapper {
 #define JSNATIVE_WRAPPER(native) { {native, nullptr} }
 
 /*
- * To define an array element rather than a named property member, cast the
- * element's index to (const char *) and initialize name with it, and set the
- * JSPROP_INDEX bit in flags.
+ * Description of a property. JS_DefineProperties and JS_InitClass take arrays
+ * of these and define many properties at once. JS_PSG, JS_PSGS and JS_PS_END
+ * are helper macros for defining such arrays.
  */
 struct JSPropertySpec {
     struct SelfHostedWrapper {
@@ -2599,6 +2595,18 @@ class MutablePropertyDescriptorOperations : public PropertyDescriptorOperations<
         setGetter(nullptr);
         setSetter(nullptr);
         value().setUndefined();
+    }
+
+    void initFields(HandleObject obj, HandleValue v, unsigned attrs,
+                    JSGetterOp getterOp, JSSetterOp setterOp) {
+        MOZ_ASSERT(getterOp != JS_PropertyStub);
+        MOZ_ASSERT(setterOp != JS_StrictPropertyStub);
+
+        object().set(obj);
+        value().set(v);
+        setAttributes(attrs);
+        setGetter(getterOp);
+        setSetter(setterOp);
     }
 
     void assign(JSPropertyDescriptor &other) {
@@ -3347,6 +3355,7 @@ class JS_FRIEND_API(ReadOnlyCompileOptions)
         lineno(1),
         column(0),
         compileAndGo(false),
+        hasPollutedGlobalScope(false),
         forEval(false),
         noScriptRval(false),
         selfHostingMode(false),
@@ -3386,6 +3395,7 @@ class JS_FRIEND_API(ReadOnlyCompileOptions)
     unsigned lineno;
     unsigned column;
     bool compileAndGo;
+    bool hasPollutedGlobalScope;
     bool forEval;
     bool noScriptRval;
     bool selfHostingMode;
@@ -3438,9 +3448,9 @@ class JS_FRIEND_API(OwningCompileOptions) : public ReadOnlyCompileOptions
     explicit OwningCompileOptions(JSContext *cx);
     ~OwningCompileOptions();
 
-    JSObject *element() const MOZ_OVERRIDE { return elementRoot; }
-    JSString *elementAttributeName() const MOZ_OVERRIDE { return elementAttributeNameRoot; }
-    JSScript *introductionScript() const MOZ_OVERRIDE { return introductionScriptRoot; }
+    JSObject *element() const override { return elementRoot; }
+    JSString *elementAttributeName() const override { return elementAttributeNameRoot; }
+    JSScript *introductionScript() const override { return introductionScriptRoot; }
 
     // Set this to a copy of |rhs|. Return false on OOM.
     bool copy(JSContext *cx, const ReadOnlyCompileOptions &rhs);
@@ -3477,6 +3487,7 @@ class JS_FRIEND_API(OwningCompileOptions) : public ReadOnlyCompileOptions
     OwningCompileOptions &setUTF8(bool u) { utf8 = u; return *this; }
     OwningCompileOptions &setColumn(unsigned c) { column = c; return *this; }
     OwningCompileOptions &setCompileAndGo(bool cng) { compileAndGo = cng; return *this; }
+    OwningCompileOptions &setHasPollutedScope(bool p) { hasPollutedGlobalScope = p; return *this; }
     OwningCompileOptions &setForEval(bool eval) { forEval = eval; return *this; }
     OwningCompileOptions &setNoScriptRval(bool nsr) { noScriptRval = nsr; return *this; }
     OwningCompileOptions &setSelfHostingMode(bool shm) { selfHostingMode = shm; return *this; }
@@ -3529,9 +3540,9 @@ class MOZ_STACK_CLASS JS_FRIEND_API(CompileOptions) : public ReadOnlyCompileOpti
         introductionScriptRoot = rhs.introductionScript();
     }
 
-    JSObject *element() const MOZ_OVERRIDE { return elementRoot; }
-    JSString *elementAttributeName() const MOZ_OVERRIDE { return elementAttributeNameRoot; }
-    JSScript *introductionScript() const MOZ_OVERRIDE { return introductionScriptRoot; }
+    JSObject *element() const override { return elementRoot; }
+    JSString *elementAttributeName() const override { return elementAttributeNameRoot; }
+    JSScript *introductionScript() const override { return introductionScriptRoot; }
 
     CompileOptions &setFile(const char *f) { filename_ = f; return *this; }
     CompileOptions &setLine(unsigned l) { lineno = l; return *this; }
@@ -3560,6 +3571,7 @@ class MOZ_STACK_CLASS JS_FRIEND_API(CompileOptions) : public ReadOnlyCompileOpti
     CompileOptions &setUTF8(bool u) { utf8 = u; return *this; }
     CompileOptions &setColumn(unsigned c) { column = c; return *this; }
     CompileOptions &setCompileAndGo(bool cng) { compileAndGo = cng; return *this; }
+    CompileOptions &setHasPollutedScope(bool p) { hasPollutedGlobalScope = p; return *this; }
     CompileOptions &setForEval(bool eval) { forEval = eval; return *this; }
     CompileOptions &setNoScriptRval(bool nsr) { noScriptRval = nsr; return *this; }
     CompileOptions &setSelfHostingMode(bool shm) { selfHostingMode = shm; return *this; }
@@ -3745,7 +3757,7 @@ namespace JS {
  * cross-compartment, it is cloned into the current compartment before executing.
  */
 extern JS_PUBLIC_API(bool)
-CloneAndExecuteScript(JSContext *cx, JS::Handle<JSObject*> obj, JS::Handle<JSScript*> script);
+CloneAndExecuteScript(JSContext *cx, JS::Handle<JSScript*> script);
 
 } /* namespace JS */
 
@@ -5253,7 +5265,6 @@ GetSavedFrameParent(JSContext *cx, HandleObject savedFrame, MutableHandleObject 
  */
 extern JS_PUBLIC_API(bool)
 StringifySavedFrameStack(JSContext *cx, HandleObject stack, MutableHandleString stringp);
-
 
 } /* namespace JS */
 

@@ -202,7 +202,7 @@ let DirectoryLinksProvider = {
   },
 
   _cacheRelatedLinks: function(link) {
-    for (let relatedSite of link.related) {
+    for (let relatedSite of link.frecent_sites) {
       let relatedMap = this._relatedLinks.get(relatedSite) || new Map();
       relatedMap.set(link.url, link);
       this._relatedLinks.set(relatedSite, relatedMap);
@@ -293,25 +293,27 @@ let DirectoryLinksProvider = {
 
   /**
    * Reads directory links file and parses its content
-   * @return a promise resolved to valid list of links or [] if read or parse fails
+   * @return a promise resolved to an object with keys 'directory' and 'suggested',
+   *         each containing a valid list of links,
+   *         or {'directory': [], 'suggested': []} if read or parse fails.
    */
   _readDirectoryLinksFile: function DirectoryLinksProvider_readDirectoryLinksFile() {
+    let emptyOutput = {directory: [], suggested: []};
     return OS.File.read(this._directoryFilePath).then(binaryData => {
       let output;
       try {
-        let locale = this.locale;
         let json = gTextDecoder.decode(binaryData);
-        let list = JSON.parse(json);
-        output = list[locale];
+        let linksObj = JSON.parse(json);
+        output = {directory: linksObj.directory || [], suggested: linksObj.suggested || []};
       }
       catch (e) {
         Cu.reportError(e);
       }
-      return output || [];
+      return output || emptyOutput;
     },
     error => {
       Cu.reportError(error);
-      return [];
+      return emptyOutput;
     });
   },
 
@@ -415,29 +417,34 @@ let DirectoryLinksProvider = {
       this._enhancedLinks.clear();
       this._relatedLinks.clear();
 
-      let links = [];
-      rawLinks.filter(link => {
+      let validityFilter = function(link) {
         // Make sure the link url is allowed and images too if they exist
         return this.isURLAllowed(link.url, ALLOWED_LINK_SCHEMES) &&
                this.isURLAllowed(link.imageURI, ALLOWED_IMAGE_SCHEMES) &&
                this.isURLAllowed(link.enhancedImageURI, ALLOWED_IMAGE_SCHEMES);
-      }).forEach((link, position) => {
+      }.bind(this);
+
+      let setCommonProperties = function(link, length, position) {
         // Stash the enhanced image for the site
         if (link.enhancedImageURI) {
           this._enhancedLinks.set(NewTabUtils.extractSite(link.url), link);
         }
-        link.lastVisitDate = rawLinks.length - position;
+        link.lastVisitDate = length - position;
+      }.bind(this);
+
+      rawLinks.suggested.filter(validityFilter).forEach((link, position) => {
+        setCommonProperties(link, rawLinks.suggested.length, position);
 
         // We cache related tiles here but do not push any of them in the links list yet.
         // The decision for which related tile to include will be made separately.
-        if ("related" == link.type) {
-          this._cacheRelatedLinks(link);
-          return;
-        }
-        link.frecency = DIRECTORY_FRECENCY;
-        links.push(link);
+        this._cacheRelatedLinks(link);
       });
-      return links;
+
+      return rawLinks.directory.filter(validityFilter).map((link, position) => {
+        setCommonProperties(link, rawLinks.directory.length, position);
+        link.frecency = DIRECTORY_FRECENCY;
+        return link;
+      });
     }).catch(ex => {
       Cu.reportError(ex);
       return [];
@@ -542,12 +549,12 @@ let DirectoryLinksProvider = {
     this.maxNumLinks = initialLength;
     if (initialLength) {
       let mostFrecentLink = sortedLinks[0];
-      if ("related" == mostFrecentLink.type) {
+      if (mostFrecentLink.targetedSite) {
         this._callObservers("onLinkChanged", {
           url: mostFrecentLink.url,
           frecency: 0,
           lastVisitDate: mostFrecentLink.lastVisitDate,
-          type: "related",
+          type: mostFrecentLink.type,
         }, 0, true);
       }
     }
@@ -563,10 +570,18 @@ let DirectoryLinksProvider = {
     // from url to relatedLink. Thus, each link has an equal chance of being chosen at
     // random from flattenedLinks if it appears only once.
     let possibleLinks = new Map();
+    let targetedSites = new Map();
     this._topSitesWithRelatedLinks.forEach(topSiteWithRelatedLink => {
       let relatedLinksMap = this._relatedLinks.get(topSiteWithRelatedLink);
       relatedLinksMap.forEach((relatedLink, url) => {
         possibleLinks.set(url, relatedLink);
+
+        // Keep a map of URL to targeted sites. We later use this to show the user
+        // what site they visited to trigger this suggestion.
+        if (!targetedSites.get(url)) {
+          targetedSites.set(url, []);
+        }
+        targetedSites.get(url).push(topSiteWithRelatedLink);
       })
     });
     let flattenedLinks = [...possibleLinks.values()];
@@ -578,9 +593,16 @@ let DirectoryLinksProvider = {
     // Show the new directory tile.
     this._callObservers("onLinkChanged", {
       url: chosenRelatedLink.url,
+      title: chosenRelatedLink.title,
       frecency: RELATED_FRECENCY,
       lastVisitDate: chosenRelatedLink.lastVisitDate,
-      type: "related",
+      type: chosenRelatedLink.type,
+
+      // Choose the first site a user has visited as the target. In the future,
+      // this should be the site with the highest frecency. However, we currently
+      // store frecency by URL not by site.
+      targetedSite: targetedSites.get(chosenRelatedLink.url).length ?
+        targetedSites.get(chosenRelatedLink.url)[0] : null
     });
     return chosenRelatedLink;
    },

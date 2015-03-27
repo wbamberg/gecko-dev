@@ -812,22 +812,26 @@ nsDOMWindowUtils::SendMouseEventCommon(const nsAString& aType,
   event.refPoint = ToWidgetPoint(CSSPoint(aX, aY), offset, presContext);
   event.ignoreRootScrollFrame = aIgnoreRootScrollFrame;
 
-  nsEventStatus status;
+  nsEventStatus status = nsEventStatus_eIgnore;
   if (aToWindow) {
     nsCOMPtr<nsIPresShell> presShell;
     nsView* view = GetViewToDispatchEvent(presContext, getter_AddRefs(presShell));
     if (!presShell || !view) {
       return NS_ERROR_FAILURE;
     }
-    status = nsEventStatus_eIgnore;
     return presShell->HandleEvent(view->GetFrame(), &event, false, &status);
   }
-  nsresult rv = widget->DispatchEvent(&event, status);
+  if (gfxPrefs::TestEventsAsyncEnabled()) {
+    status = widget->DispatchInputEvent(&event);
+  } else {
+    nsresult rv = widget->DispatchEvent(&event, status);
+    NS_ENSURE_SUCCESS(rv, rv);
+  }
   if (aPreventDefault) {
     *aPreventDefault = (status == nsEventStatus_eConsumeNoDefault);
   }
 
-  return rv;
+  return NS_OK;
 }
 
 NS_IMETHODIMP
@@ -3772,7 +3776,7 @@ nsDOMWindowUtils::GetOMTAStyle(nsIDOMElement* aElement,
 
 namespace {
 
-class HandlingUserInputHelper MOZ_FINAL : public nsIJSRAIIHelper
+class HandlingUserInputHelper final : public nsIJSRAIIHelper
 {
 public:
   explicit HandlingUserInputHelper(bool aHandlingUserInput);
