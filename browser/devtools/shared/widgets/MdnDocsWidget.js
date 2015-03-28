@@ -342,16 +342,16 @@ function getSummary(mdnDocument) {
 /**
  * Given an MDN page, get the "syntax" portion.
  *
- * First, this attempts to get the section of the page
- * with the ID "simplesyntax". Eventually, we hope that all
- * MDN pages will identify syntax examples using the ID,
- * but they don't, yet.
+ * First we get the #Syntax section of the document. The syntax
+ * section we want is somewhere inside there.
  *
- * If the page does not contain this
- * ID, we return the textContent of the second
- * non-whitespace node in the #Syntax section of the document.
+ * If the page is in the old structure, then the *first two*
+ * non-whitespace elements in the #Syntax section will be <PRE>
+ * nodes, and the second of these will be the syntax section.
  *
- * Both the first and second nodes are expected to be <PRE> nodes.
+ * If the page is in the new structure, then the only the *first*
+ * non-whitespace element in the #Syntax section will be a <PRE>
+ * node, and it will be the syntax section.
  *
  * @param {Document} mdnDocument
  * The document in which to look for the "syntax" section.
@@ -360,10 +360,6 @@ function getSummary(mdnDocument) {
  * The syntax section as a string, or null if it could not be found.
  */
 function getSyntax(mdnDocument) {
-  let syntaxSummary = mdnDocument.getElementById("simplesyntax");
-  if (syntaxSummary) {
-    return syntaxSummary.textContent;
-  }
 
   let syntax = mdnDocument.getElementById("Syntax");
   if (!hasTagName(syntax, "H2")) {
@@ -376,11 +372,12 @@ function getSyntax(mdnDocument) {
   }
 
   let secondParagraph = nodeAfter(firstParagraph);
-  if (!hasTagName(secondParagraph, "PRE")) {
-    return null;
+  if (hasTagName(secondParagraph, "PRE")) {
+    return secondParagraph.textContent;
   }
-
-  return secondParagraph.textContent;
+  else {
+    return firstParagraph.textContent;
+  }
 }
 
 /**
