@@ -855,6 +855,16 @@ PuppetWidget::SetCursor(nsCursor aCursor)
 }
 
 nsresult
+PuppetWidget::SynthesizeNativeMouseMove(mozilla::LayoutDeviceIntPoint aPoint)
+{
+  if (mTabChild &&
+      !mTabChild->SendSynthesizeNativeMouseMove(aPoint)) {
+    return NS_ERROR_FAILURE;
+  }
+  return NS_OK;
+}
+
+nsresult
 PuppetWidget::Paint()
 {
   MOZ_ASSERT(!mDirtyRegion.IsEmpty(), "paint event logic messed up");
@@ -1011,6 +1021,13 @@ PuppetWidget::GetWindowPosition()
   int32_t winX, winY, winW, winH;
   NS_ENSURE_SUCCESS(GetOwningTabChild()->GetDimensions(0, &winX, &winY, &winW, &winH), nsIntPoint());
   return nsIntPoint(winX, winY);
+}
+
+NS_METHOD
+PuppetWidget::GetScreenBounds(nsIntRect &aRect) {
+  aRect.MoveTo(LayoutDeviceIntPoint::ToUntyped(WidgetToScreenOffset()));
+  aRect.SizeTo(mBounds.Size());
+  return NS_OK;
 }
 
 PuppetScreen::PuppetScreen(void *nativeScreen)

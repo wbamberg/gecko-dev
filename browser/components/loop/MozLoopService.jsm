@@ -165,10 +165,14 @@ let MozLoopServiceInternal = {
    */
   deferredRegistrations: new Map(),
 
-  get pushHandler() this.mocks.pushHandler || MozLoopPushHandler,
+  get pushHandler() {
+    return this.mocks.pushHandler || MozLoopPushHandler
+  },
 
   // The uri of the Loop server.
-  get loopServerUri() Services.prefs.getCharPref("loop.server"),
+  get loopServerUri() {
+    return Services.prefs.getCharPref("loop.server")
+  },
 
   /**
    * The initial delay for push registration. This ensures we don't start
@@ -823,7 +827,8 @@ let MozLoopServiceInternal = {
    *
    * @param {Object} conversationWindowData The data to be obtained by the
    *                                        window when it opens.
-   * @returns {Number} The id of the window.
+   * @returns {Number} The id of the window, null if a window could not
+   *                   be opened.
    */
   openChatWindow: function(conversationWindowData) {
     // So I guess the origin is the loop server!?
@@ -909,7 +914,9 @@ let MozLoopServiceInternal = {
       }.bind(this), true);
     };
 
-    Chat.open(null, origin, "", url, undefined, undefined, callback);
+    if (!Chat.open(null, origin, "", url, undefined, undefined, callback)) {
+      return null;
+    }
     return windowId;
   },
 
@@ -1200,7 +1207,7 @@ this.MozLoopService = {
     },
     error => {
       // If we get a non-object then setError was already called for a different error type.
-      if (typeof(error) == "object") {
+      if (typeof error == "object") {
         MozLoopServiceInternal.setError("initialization", error, () => MozLoopService.delayedInitialize(Promise.defer()));
       }
     });
@@ -1511,7 +1518,7 @@ this.MozLoopService = {
     });
   },
 
-  openFxASettings: Task.async(function() {
+  openFxASettings: Task.async(function* () {
     try {
       let fxAOAuthClient = yield MozLoopServiceInternal.promiseFxAOAuthClient();
       if (!fxAOAuthClient) {

@@ -21,12 +21,21 @@ include protocol PFileDescriptorSet;
 include protocol PFMRadio;
 include protocol PFileSystemRequest;
 include protocol PHal;
+include protocol PIcc;
 include protocol PProcessHangMonitor;
 include protocol PImageBridge;
 include protocol PMemoryReportRequest;
 include protocol PMobileConnection;
 include protocol PNecko;
+// FIXME This is pretty ridiculous, but we have to keep the order of the
+//       following 4 includes, or the parser is confused about PGMPContent
+//       bridging PContent and PGMP. As soon as it registers the bridge between
+//       PContent and PPluginModule it seems to think that PContent's parent and
+//       child live in the same process!
+include protocol PGMPContent;
+include protocol PGMPService;
 include protocol PPluginModule;
+include protocol PGMP;
 include protocol PPrinting;
 include protocol POfflineCacheUpdate;
 include protocol PScreenManager;
@@ -363,6 +372,7 @@ prio(normal upto urgent) sync protocol PContent
     parent opens PProcessHangMonitor;
     parent opens PSharedBufferManager;
     parent opens PImageBridge;
+    parent opens PGMPService;
     child opens PBackground;
 
     manages PAsmJSCacheEntry;
@@ -379,6 +389,7 @@ prio(normal upto urgent) sync protocol PContent
     manages PFileDescriptorSet;
     manages PFMRadio;
     manages PHal;
+    manages PIcc;
     manages PMemoryReportRequest;
     manages PMobileConnection;
     manages PNecko;
@@ -559,6 +570,9 @@ child:
     prio(high) sync GetProfile()
       returns (nsCString aProfile);
 
+    InvokeDragSession(IPCDataTransfer[] transfers, uint32_t action);
+
+    EndDragSession(bool aDoneDrag, bool aUserCancelled);
     NuwaFreeze();
 
     async DomainSetChanged(uint32_t aSetType, uint32_t aChangeType, OptionalURIParams aDomain);
@@ -570,6 +584,12 @@ child:
     async Shutdown();
 
     async LoadProcessScript(nsString url);
+
+    /**
+     * Requests a full native update of a native plugin child window. This is
+     * a Windows specific call.
+     */
+    async UpdateWindow(uintptr_t aChildId);
 
 parent:
     /**
@@ -606,14 +626,17 @@ parent:
         returns (ContentParentId cpId, bool isForApp, bool isForBrowser, TabId tabId);
     sync BridgeToChildProcess(ContentParentId cpId);
 
+    async CreateGMPService();
+    sync GetGMPPluginVersionForAPI(nsCString api, nsCString[] tags)
+        returns (bool hasPlugin, nsCString version);
+
     /**
      * This call connects the content process to a plugin process. While this
      * call runs, a new PluginModuleParent will be created in the ContentChild
      * via bridging. The corresponding PluginModuleChild will live in the plugin
-     * process. We use intr semantics here to ensure that the PluginModuleParent
-     * allocation message is dispatched before LoadPlugin returns.
+     * process.
      */
-    sync LoadPlugin(uint32_t pluginId) returns (nsresult rv);
+    sync LoadPlugin(uint32_t aPluginId) returns (nsresult aResult, uint32_t aRunID);
 
     /**
      * This call is used by asynchronous plugin instantiation to notify the
@@ -655,6 +678,8 @@ parent:
         returns (bool isSecureURI);
 
     PHal();
+
+    PIcc(uint32_t serviceId);
 
     PMobileConnection(uint32_t clientId);
 
@@ -919,6 +944,7 @@ parent:
      */
     async FinishShutdown();
 
+    UpdateDropEffect(uint32_t aDragAction, uint32_t aDropEffect);
 both:
      AsyncMessage(nsString aMessage, ClonedMessageData aData,
                   CpowEntry[] aCpows, Principal aPrincipal);

@@ -35,6 +35,7 @@ class nsIDumpGCAndCCLogsCallback;
 class nsIMemoryReporter;
 class nsITimer;
 class ParentIdleListener;
+class nsIWidget;
 
 namespace mozilla {
 class PRemoteSpellcheckEngineParent;
@@ -67,11 +68,11 @@ class TabContext;
 class ContentBridgeParent;
 
 class ContentParent final : public PContentParent
-                              , public nsIContentParent
-                              , public nsIObserver
-                              , public nsIDOMGeoPositionCallback
-                              , public nsIDOMGeoPositionErrorCallback
-                              , public mozilla::LinkedListElement<ContentParent>
+                          , public nsIContentParent
+                          , public nsIObserver
+                          , public nsIDOMGeoPositionCallback
+                          , public nsIDOMGeoPositionErrorCallback
+                          , public mozilla::LinkedListElement<ContentParent>
 {
     typedef mozilla::ipc::GeckoChildProcessHost GeckoChildProcessHost;
     typedef mozilla::ipc::OptionalURIParams OptionalURIParams;
@@ -144,6 +145,20 @@ public:
 
     static void NotifyUpdatedDictionaries();
 
+#if defined(XP_WIN)
+    /**
+     * Windows helper for firing off an update window request to a plugin
+     * instance.
+     *
+     * aWidget - the eWindowType_plugin_ipc_chrome widget associated with
+     *           this plugin window.
+     */
+    static void SendAsyncUpdate(nsIWidget* aWidget);
+#endif
+
+    // Let managees query if it is safe to send messages.
+    bool IsDestroyed() { return !mIPCOpen; }
+
     virtual bool RecvCreateChildProcess(const IPCTabContext& aContext,
                                         const hal::ProcessPriority& aPriority,
                                         const TabId& aOpenerTabId,
@@ -153,7 +168,13 @@ public:
                                         TabId* aTabId) override;
     virtual bool RecvBridgeToChildProcess(const ContentParentId& aCpId) override;
 
-    virtual bool RecvLoadPlugin(const uint32_t& aPluginId, nsresult* aRv) override;
+    virtual bool RecvCreateGMPService() override;
+    virtual bool RecvGetGMPPluginVersionForAPI(const nsCString& aAPI,
+                                               nsTArray<nsCString>&& aTags,
+                                               bool* aHasPlugin,
+                                               nsCString* aVersion) override;
+
+    virtual bool RecvLoadPlugin(const uint32_t& aPluginId, nsresult* aRv, uint32_t* aRunID) override;
     virtual bool RecvConnectPluginBridge(const uint32_t& aPluginId, nsresult* aRv) override;
     virtual bool RecvFindPlugins(const uint32_t& aPluginEpoch,
                                  nsTArray<PluginTag>* aPlugins,
@@ -350,6 +371,7 @@ public:
 
     virtual bool RecvFinishShutdown() override;
 
+    void MaybeInvokeDragSession(TabParent* aParent);
 protected:
     void OnChannelConnected(int32_t pid) override;
     virtual void ActorDestroy(ActorDestroyReason why) override;
@@ -488,6 +510,9 @@ private:
 
     static void ForceKillTimerCallback(nsITimer* aTimer, void* aClosure);
 
+    PGMPServiceParent*
+    AllocPGMPServiceParent(mozilla::ipc::Transport* aTransport,
+                           base::ProcessId aOtherProcess) override;
     PCompositorParent*
     AllocPCompositorParent(mozilla::ipc::Transport* aTransport,
                            base::ProcessId aOtherProcess) override;
@@ -549,6 +574,9 @@ private:
                                  const uint32_t& aFlags, bool* aIsSecureURI) override;
 
     virtual bool DeallocPHalParent(PHalParent*) override;
+
+    virtual PIccParent* AllocPIccParent(const uint32_t& aServiceId) override;
+    virtual bool DeallocPIccParent(PIccParent* aActor) override;
 
     virtual PMemoryReportRequestParent*
     AllocPMemoryReportRequestParent(const uint32_t& aGeneration,
@@ -743,7 +771,7 @@ private:
                                   OptionalURIParams* aURI) override;
 
     virtual bool RecvNotifyKeywordSearchLoading(const nsString &aProvider,
-                                                const nsString &aKeyword) override; 
+                                                const nsString &aKeyword) override;
 
     virtual void ProcessingError(Result aCode, const char* aMsgName) override;
 
@@ -795,6 +823,8 @@ private:
     virtual bool RecvPDocAccessibleConstructor(PDocAccessibleParent* aDoc,
                                                PDocAccessibleParent* aParentDoc, const uint64_t& aParentID) override;
 
+    virtual bool RecvUpdateDropEffect(const uint32_t& aDragAction,
+                                      const uint32_t& aDropEffect) override;
     // If you add strong pointers to cycle collected objects here, be sure to
     // release these objects in ShutDownProcess.  See the comment there for more
     // details.

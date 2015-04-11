@@ -16,6 +16,7 @@ DIRS += [
     'webrtc',
     'webspeech',
     'webvtt',
+    'standalone',
 ]
 
 if CONFIG['MOZ_RAW']:
@@ -122,6 +123,7 @@ EXPORTS += [
     'SharedBuffer.h',
     'SharedThreadPool.h',
     'StreamBuffer.h',
+    'TaskDispatcher.h',
     'ThreadPoolCOMListener.h',
     'TimeUnits.h',
     'TimeVarying.h',
@@ -146,6 +148,7 @@ EXPORTS.mozilla.dom += [
     'AudioTrack.h',
     'AudioTrackList.h',
     'GetUserMediaRequest.h',
+    'MediaDeviceInfo.h',
     'MediaDevices.h',
     'MediaStreamError.h',
     'MediaStreamTrack.h',
@@ -183,6 +186,7 @@ UNIFIED_SOURCES += [
     'MediaDecoder.cpp',
     'MediaDecoderReader.cpp',
     'MediaDecoderStateMachine.cpp',
+    'MediaDeviceInfo.cpp',
     'MediaDevices.cpp',
     'MediaManager.cpp',
     'MediaRecorder.cpp',

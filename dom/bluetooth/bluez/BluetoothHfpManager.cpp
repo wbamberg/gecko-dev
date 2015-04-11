@@ -28,12 +28,11 @@
 
 #ifdef MOZ_B2G_RIL
 #include "nsIIccInfo.h"
-#include "nsIIccProvider.h"
+#include "nsIIccService.h"
 #include "nsIMobileConnectionInfo.h"
 #include "nsIMobileConnectionService.h"
 #include "nsIMobileNetworkInfo.h"
 #include "nsITelephonyService.h"
-#include "nsRadioInterfaceLayer.h"
 #endif
 
 /**
@@ -419,6 +418,12 @@ BluetoothHfpManager::Reset()
 bool
 BluetoothHfpManager::Init()
 {
+#ifdef MOZ_B2G_BT_API_V2
+  // The function must run at b2g process since it would access SettingsService.
+  MOZ_ASSERT(IsMainProcess());
+#else
+// Missing in bluetooth1
+#endif
   MOZ_ASSERT(NS_IsMainThread());
 
   nsCOMPtr<nsIObserverService> obs = services::GetObserverService();
@@ -568,7 +573,11 @@ BluetoothHfpManager::HandleVolumeChanged(nsISupports* aSubject)
   //  {"key":"volumeup", "value":10}
   //  {"key":"volumedown", "value":2}
 
+#ifdef MOZ_B2G_BT_API_V2
+  RootedDictionary<dom::SettingChangeNotification> setting(nsContentUtils::RootingCx());
+#else
   RootedDictionary<SettingChangeNotification> setting(nsContentUtils::RootingCx());
+#endif
   if (!WrappedJSToDictionary(aSubject, setting)) {
     return;
   }
@@ -664,12 +673,16 @@ BluetoothHfpManager::HandleVoiceConnectionChanged(uint32_t aClientId)
 void
 BluetoothHfpManager::HandleIccInfoChanged(uint32_t aClientId)
 {
-  nsCOMPtr<nsIIccProvider> icc =
-    do_GetService(NS_RILCONTENTHELPER_CONTRACTID);
+  nsCOMPtr<nsIIccService> service =
+    do_GetService(ICC_SERVICE_CONTRACTID);
+  NS_ENSURE_TRUE_VOID(service);
+
+  nsCOMPtr<nsIIcc> icc;
+  service->GetIccByServiceId(aClientId, getter_AddRefs(icc));
   NS_ENSURE_TRUE_VOID(icc);
 
   nsCOMPtr<nsIIccInfo> iccInfo;
-  icc->GetIccInfo(aClientId, getter_AddRefs(iccInfo));
+  icc->GetIccInfo(getter_AddRefs(iccInfo));
   NS_ENSURE_TRUE_VOID(iccInfo);
 
   nsCOMPtr<nsIGsmIccInfo> gsmIccInfo = do_QueryInterface(iccInfo);
@@ -1078,11 +1091,19 @@ BluetoothHfpManager::ReceiveSocketData(BluetoothSocket* aSocket,
     }
 #endif // MOZ_B2G_RIL
   } else {
+#ifdef MOZ_B2G_BT_API_V2
+    nsCString warningMsg;
+    warningMsg.Append(NS_LITERAL_CSTRING("Unsupported AT command: "));
+    warningMsg.Append(msg);
+    warningMsg.Append(NS_LITERAL_CSTRING(", reply with ERROR"));
+    BT_WARNING(warningMsg.get());
+#else
     nsCString warningMsg;
     warningMsg.AppendLiteral("Unsupported AT command: ");
     warningMsg.Append(msg);
     warningMsg.AppendLiteral(", reply with ERROR");
     BT_WARNING(warningMsg.get());
+#endif
 
     SendLine("ERROR");
     return;
@@ -1651,7 +1672,11 @@ BluetoothHfpManager::HandleCallStateChanged(uint32_t aCallIndex,
           GetNumberOfCalls(nsITelephonyService::CALL_STATE_DISCONNECTED)) {
         // In order to let user hear busy tone via connected Bluetooth headset,
         // we postpone the timing of dropping SCO.
+#ifdef MOZ_B2G_BT_API_V2
+        if (!(aError.Equals(NS_LITERAL_STRING("BusyError")))) {
+#else
         if (!(aError.EqualsLiteral("BusyError"))) {
+#endif
           DisconnectSco();
         } else {
           // Close Sco later since Dialer is still playing busy tone via HF.
@@ -1885,8 +1910,12 @@ BluetoothHfpManager::OnScoConnectSuccess()
 {
   // For active connection request, we need to reply the DOMRequest
   if (mScoRunnable) {
+#ifdef MOZ_B2G_BT_API_V2
+    DispatchReplySuccess(mScoRunnable);
+#else
     DispatchBluetoothReply(mScoRunnable,
                            BluetoothValue(true), EmptyString());
+#endif
     mScoRunnable = nullptr;
   }
 
@@ -1900,9 +1929,13 @@ void
 BluetoothHfpManager::OnScoConnectError()
 {
   if (mScoRunnable) {
+#ifdef MOZ_B2G_BT_API_V2
+    DispatchReplyError(mScoRunnable,
+                       NS_LITERAL_STRING("Failed to create SCO socket!"));
+#else
     NS_NAMED_LITERAL_STRING(replyError, "Failed to create SCO socket!");
     DispatchBluetoothReply(mScoRunnable, BluetoothValue(), replyError);
-
+#endif
     mScoRunnable = nullptr;
   }
 

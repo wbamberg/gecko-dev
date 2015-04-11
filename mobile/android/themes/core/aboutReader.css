@@ -74,7 +74,7 @@ body {
   display: none;
   text-align: center;
   width: 100%;
-  font-size: 0.9rem;
+  font-size: 0.9em;
 }
 
 .header {
@@ -101,7 +101,7 @@ body {
 }
 
 .header > h1 {
-  font-size: 1.33rem;
+  font-size: 1.33em;
   font-weight: 700;
   line-height: 1.1em;
   width: 100%;
@@ -146,16 +146,16 @@ body {
 /* This covers caption, domain, and credits
    texts in the reader UI */
 
-.content .wp-caption-text,
-.content figcaption,
+#moz-reader-content .wp-caption-text,
+#moz-reader-content figcaption,
 .header > .domain,
 .header > .credits {
-  font-size: 0.9rem;
+  font-size: 0.9em;
 }
 
-.content {
+#moz-reader-content {
   display: none;
-  font-size: 1rem;
+  font-size: 1em;
 }
 
 .content a {
@@ -175,7 +175,7 @@ body {
   height: auto !important;
 }
 
-.content p {
+#moz-reader-content p {
   line-height: 1.4em !important;
   margin: 0px !important;
   margin-bottom: 20px !important;
@@ -197,18 +197,17 @@ body {
 .content p > a:only-child > img:only-child,
 .content .wp-caption img,
 .content figure img {
-  max-width: none !important;
-  height: auto !important;
-  display: block !important;
-  margin-top: 0px !important;
-  margin-bottom: 32px !important;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
 }
 
-/* If image is place inside one of these blocks
-   there's no need to add margin at the bottom */
-.content .wp-caption img,
-.content figure img {
-  margin-bottom: 0px !important;
+/* Account for body padding to make image full width */
+.content img[moz-reader-full-width] {
+  width: calc(100% + 40px);
+  margin-left: -20px;
+  margin-right: -20px;
+  max-width: none !important;
 }
 
 /* Image caption text */
@@ -259,8 +258,8 @@ body {
   border-left-color: #777777 !important;
 }
 
-.content ul,
-.content ol {
+#moz-reader-content ul,
+#moz-reader-content ol {
   margin: 0px !important;
   margin-bottom: 20px !important;
   padding: 0px !important;
@@ -269,7 +268,7 @@ body {
 
 .content ul {
   -moz-padding-start: 30px !important;
-  list-style: disk !important;
+  list-style: disc !important;
 }
 
 .content ol {
@@ -399,8 +398,8 @@ body {
   flex: 0;
   font-size: 24px;
   color: #000000;
-  margin-left: -20px;
-  margin-right: -20px;
+  margin-left: 40px;
+  margin-right: 40px;
 }
 
 .serif-button {
@@ -419,10 +418,12 @@ body {
 
 .minus-button {
   background-size: 24px 6px;
+  margin-left: 60px;
 }
 
 .plus-button {
   background-size: 24px 24px;
+  margin-right: 60px;
 }
 
 #color-scheme-buttons > button {
@@ -458,7 +459,8 @@ body {
 
 /* desktop-only controls */
 .close-button,
-.list-button {
+.list-button,
+.footer {
   display: none;
 }
 

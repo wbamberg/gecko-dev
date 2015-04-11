@@ -20,7 +20,7 @@ class nsImageBoxFrame;
 class nsDisplayXULImage;
 
 class nsImageBoxListener final : public imgINotificationObserver,
-                                     public imgIOnloadBlocker
+                                 public imgIOnloadBlocker
 {
 public:
   nsImageBoxListener();
@@ -144,7 +144,8 @@ public:
 
   virtual already_AddRefed<ImageContainer> GetContainer(LayerManager* aManager,
                                                         nsDisplayListBuilder* aBuilder) override;
-  virtual void ConfigureLayer(ImageLayer* aLayer, const nsIntPoint& aOffset) override;
+  virtual void ConfigureLayer(ImageLayer* aLayer,
+                              const ContainerLayerParameters& aParameters) override;
   virtual nsRect GetBounds(nsDisplayListBuilder* aBuilder, bool* aSnap) override
   {
     *aSnap = true;

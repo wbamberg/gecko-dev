@@ -47,6 +47,7 @@ WEBIDL_FILES = [
     'AudioTrack.webidl',
     'AudioTrackList.webidl',
     'AutocompleteInfo.webidl',
+    'AVInputPort.webidl',
     'BarProp.webidl',
     'BatteryManager.webidl',
     'BeforeAfterKeyboardEvent.webidl',
@@ -103,6 +104,7 @@ WEBIDL_FILES = [
     'DeviceMotionEvent.webidl',
     'DeviceStorage.webidl',
     'Directory.webidl',
+    'DisplayPortInputPort.webidl',
     'Document.webidl',
     'DocumentFragment.webidl',
     'DocumentType.webidl',
@@ -152,6 +154,7 @@ WEBIDL_FILES = [
     'Geolocation.webidl',
     'GeometryUtils.webidl',
     'GetUserMediaRequest.webidl',
+    'HDMIInputPort.webidl',
     'Headers.webidl',
     'History.webidl',
     'HTMLAllCollection.webidl',
@@ -229,6 +232,7 @@ WEBIDL_FILES = [
     'HTMLTrackElement.webidl',
     'HTMLUListElement.webidl',
     'HTMLVideoElement.webidl',
+    'IccCardLockError.webidl',
     'IDBCursor.webidl',
     'IDBDatabase.webidl',
     'IDBEnvironment.webidl',
@@ -248,6 +252,8 @@ WEBIDL_FILES = [
     'ImageDocument.webidl',
     'InputEvent.webidl',
     'InputMethod.webidl',
+    'InputPort.webidl',
+    'InputPortManager.webidl',
     'InspectorUtils.webidl',
     'InstallEvent.webidl',
     'InterAppConnection.webidl',
@@ -261,6 +267,7 @@ WEBIDL_FILES = [
     'ListBoxObject.webidl',
     'LocalMediaStream.webidl',
     'Location.webidl',
+    'MediaDeviceInfo.webidl',
     'MediaDevices.webidl',
     'MediaElementAudioSourceNode.webidl',
     'MediaError.webidl',
@@ -287,6 +294,9 @@ WEBIDL_FILES = [
     'MozActivity.webidl',
     'MozCellBroadcast.webidl',
     'MozCellBroadcastMessage.webidl',
+    'MozIcc.webidl',
+    'MozIccInfo.webidl',
+    'MozIccManager.webidl',
     'MozMmsMessage.webidl',
     'MozMobileCellInfo.webidl',
     'MozMobileConnection.webidl',
@@ -650,14 +660,6 @@ if CONFIG['MOZ_B2G_BT']:
             'BluetoothDevice.webidl',
             'BluetoothManager.webidl',
         ]
-
-if CONFIG['MOZ_B2G_RIL']:
-    WEBIDL_FILES += [
-        'IccCardLockError.webidl',
-        'MozIcc.webidl',
-        'MozIccInfo.webidl',
-        'MozIccManager.webidl',
-    ]
 
 if CONFIG['MOZ_NFC']:
     WEBIDL_FILES += [

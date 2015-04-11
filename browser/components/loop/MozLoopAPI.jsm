@@ -25,6 +25,8 @@ XPCOMUtils.defineLazyModuleGetter(this, "PageMetadata",
                                         "resource://gre/modules/PageMetadata.jsm");
 XPCOMUtils.defineLazyModuleGetter(this, "PluralForm",
                                         "resource://gre/modules/PluralForm.jsm");
+XPCOMUtils.defineLazyModuleGetter(this, "UpdateChannel",
+                                        "resource://gre/modules/UpdateChannel.jsm");
 XPCOMUtils.defineLazyModuleGetter(this, "UITour",
                                         "resource:///modules/UITour.jsm");
 XPCOMUtils.defineLazyGetter(this, "appInfo", function() {
@@ -149,11 +151,16 @@ const injectObjectAPI = function(api, targetWindow) {
       // If the last parameter is a function, assume its a callback
       // and wrap it differently.
       if (callbackIsFunction) {
-        api[func](...params, function(...results) {
+        api[func](...params, function callback(...results) {
           // When the function was garbage collected due to async events, like
           // closing a window, we want to circumvent a JS error.
           if (callbackIsFunction && typeof lastParam != "function") {
             MozLoopService.log.debug(func + ": callback function was lost.");
+            // Clean up event listeners.
+            if (func == "on" && api.off) {
+              api.off(results[0], callback);
+              return;
+            }
             // Assume the presence of a first result argument to be an error.
             if (results[0]) {
               MozLoopService.log.error(func + " error:", results[0]);
@@ -167,6 +174,7 @@ const injectObjectAPI = function(api, targetWindow) {
           lastParam = cloneValueInto(lastParam, api);
           return cloneValueInto(api[func](...params, lastParam), targetWindow);
         } catch (ex) {
+          MozLoopService.log.error(func + " error: ", ex, params, lastParam);
           return cloneValueInto(ex, targetWindow);
         }
       }
@@ -718,13 +726,11 @@ function injectLoopAPI(targetWindow) {
       enumerable: true,
       get: function() {
         if (!appVersionInfo) {
-          let defaults = Services.prefs.getDefaultBranch(null);
-
           // If the lazy getter explodes, we're probably loaded in xpcshell,
           // which doesn't have what we need, so log an error.
           try {
             appVersionInfo = Cu.cloneInto({
-              channel: defaults.getCharPref("app.update.channel"),
+              channel: UpdateChannel.get(),
               version: appInfo.version,
               OS: appInfo.OS
             }, targetWindow);

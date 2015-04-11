@@ -164,7 +164,16 @@ public:
   bool IsDormantNeeded();
   // Set/Unset dormant state.
   void SetDormant(bool aDormant);
+
+private:
   void Shutdown();
+public:
+
+  void DispatchShutdown()
+  {
+    TaskQueue()->Dispatch(NS_NewRunnableMethod(this, &MediaDecoderStateMachine::Shutdown));
+  }
+
   void ShutdownReader();
   void FinishShutdown();
 
@@ -202,8 +211,8 @@ public:
 
   // Functions used by assertions to ensure we're calling things
   // on the appropriate threads.
-  bool OnDecodeThread() const;
-  bool OnStateMachineThread() const;
+  bool OnDecodeTaskQueue() const;
+  bool OnTaskQueue() const;
 
   MediaDecoderOwner::NextFrameStatus GetNextFrameStatus();
 
@@ -245,11 +254,17 @@ public:
   // the decode monitor held.
   void UpdatePlaybackPosition(int64_t aTime);
 
+private:
   // Causes the state machine to switch to buffering state, and to
-  // immediately stop playback and buffer downloaded data. Must be called
-  // with the decode monitor held. Called on the state machine thread and
-  // the main thread.
+  // immediately stop playback and buffer downloaded data. Called on
+  // the state machine thread.
   void StartBuffering();
+public:
+
+  void DispatchStartBuffering()
+  {
+    TaskQueue()->Dispatch(NS_NewRunnableMethod(this, &MediaDecoderStateMachine::StartBuffering));
+  }
 
   // This is called on the state machine thread and audio thread.
   // The decoder monitor must be obtained before calling this.
@@ -316,6 +331,22 @@ public:
   // Returns the state machine task queue.
   MediaTaskQueue* TaskQueue() const { return mTaskQueue; }
 
+  // Returns the tail dispatcher associated with TaskQueue(), which will fire
+  // its tasks when the current task completes. May only be called when running
+  // in TaskQueue().
+  TaskDispatcher& TailDispatcher()
+  {
+    MOZ_ASSERT(OnTaskQueue());
+    return TaskQueue()->TailDispatcher();
+  }
+
+  // Convenience method to perform a tail dispatch.
+  void TailDispatch(AbstractThread* aThread,
+                    already_AddRefed<nsIRunnable> aTask)
+  {
+    TailDispatcher().AddTask(aThread, Move(aTask));
+  }
+
   // Calls ScheduleStateMachine() after taking the decoder lock. Also
   // notifies the decoder thread in case it's waiting on the decoder lock.
   void ScheduleStateMachineWithLockAndWakeDecoder();
@@ -330,7 +361,7 @@ public:
 
   void OnDelayedSchedule()
   {
-    MOZ_ASSERT(OnStateMachineThread());
+    MOZ_ASSERT(OnTaskQueue());
     ReentrantMonitorAutoEnter mon(mDecoder->GetReentrantMonitor());
     mDelayedScheduler.CompleteRequest();
     ScheduleStateMachine();
@@ -703,15 +734,37 @@ protected:
   // Can only be called on the state machine thread.
   void SetPlayStartTime(const TimeStamp& aTimeStamp);
 
+private:
   // Update mAudioEndTime.
   void OnAudioEndTimeUpdate(int64_t aAudioEndTime);
+public:
+  void DispatchOnAudioEndTimeUpdate(int64_t aAudioEndTime)
+  {
+    RefPtr<nsRunnable> r =
+      NS_NewRunnableMethodWithArg<int64_t>(this, &MediaDecoderStateMachine::OnAudioEndTimeUpdate, aAudioEndTime);
+    TaskQueue()->Dispatch(r.forget());
+  }
 
+private:
   // Update mDecoder's playback offset.
   void OnPlaybackOffsetUpdate(int64_t aPlaybackOffset);
+public:
+  void DispatchOnPlaybackOffsetUpdate(int64_t aPlaybackOffset)
+  {
+    RefPtr<nsRunnable> r =
+      NS_NewRunnableMethodWithArg<int64_t>(this, &MediaDecoderStateMachine::OnPlaybackOffsetUpdate, aPlaybackOffset);
+    TaskQueue()->Dispatch(r.forget());
+  }
 
+private:
   // Called by the AudioSink to signal that all outstanding work is complete
   // and the sink is shutting down.
   void OnAudioSinkComplete();
+public:
+  void DispatchOnAudioSinkComplete()
+  {
+    TaskQueue()->Dispatch(NS_NewRunnableMethod(this, &MediaDecoderStateMachine::OnAudioSinkComplete));
+  }
 
   // Called by the AudioSink to signal errors.
   void OnAudioSinkError();
@@ -756,8 +809,7 @@ protected:
 
     void Reset()
     {
-      MOZ_ASSERT(mSelf->OnStateMachineThread(),
-                 "Must be on state machine queue to disconnect");
+      MOZ_ASSERT(mSelf->OnTaskQueue(), "Must be on state machine queue to disconnect");
       if (IsScheduled()) {
         mRequest.Disconnect();
         mTarget = TimeStamp();
@@ -766,6 +818,7 @@ protected:
 
     void Ensure(mozilla::TimeStamp& aTarget)
     {
+      MOZ_ASSERT(mSelf->OnTaskQueue());
       if (IsScheduled() && mTarget <= aTarget) {
         return;
       }
@@ -774,7 +827,7 @@ protected:
       mRequest.Begin(mMediaTimer->WaitUntil(mTarget, __func__)->RefableThen(
         mSelf->TaskQueue(), __func__, mSelf,
         &MediaDecoderStateMachine::OnDelayedSchedule,
-        &MediaDecoderStateMachine::NotReached));
+        &MediaDecoderStateMachine::NotReached, mSelf->TailDispatcher()));
     }
 
     void CompleteRequest()
@@ -864,17 +917,17 @@ protected:
       return mTarget.IsValid();
     }
 
-    void Resolve(bool aAtEnd, const char* aCallSite)
+    void Resolve(bool aAtEnd, const char* aCallSite, TaskDispatcher& aDispatcher)
     {
       mTarget.Reset();
       MediaDecoder::SeekResolveValue val(aAtEnd, mTarget.mEventVisibility);
-      mPromise.Resolve(val, aCallSite);
+      mPromise.Resolve(val, aCallSite, aDispatcher);
     }
 
-    void RejectIfExists(const char* aCallSite)
+    void RejectIfExists(const char* aCallSite, TaskDispatcher& aDispatcher)
     {
       mTarget.Reset();
-      mPromise.RejectIfExists(true, aCallSite);
+      mPromise.RejectIfExists(true, aCallSite, aDispatcher);
     }
 
     ~SeekJob()
@@ -1200,6 +1253,8 @@ protected:
   // to decode any audio/video since the MediaDecoder will trigger a seek
   // operation soon.
   bool mSentFirstFrameLoadedEvent;
+
+  bool mSentPlaybackEndedEvent;
 };
 
 } // namespace mozilla;

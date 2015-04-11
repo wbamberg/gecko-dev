@@ -410,14 +410,21 @@
         <item name="android:textColor">?android:attr/textColorHint</item>
     </style>
 
-    <style name="TextAppearance.Widget.DoorHanger.Medium" parent="TextAppearance.Medium">
+    <style name="TextAppearance.DoorHanger">
         <item name="android:textColor">@color/placeholder_active_grey</item>
         <item name="android:textColorLink">@color/doorhanger_link</item>
     </style>
 
-    <style name="TextAppearance.Widget.DoorHanger.Small" parent="TextAppearance.Small">
-        <item name="android:textColor">@color/placeholder_active_grey</item>
-        <item name="android:textColorLink">@color/doorhanger_link</item>
+    <style name="TextAppearance.DoorHanger.Medium">
+        <item name="android:textSize">16dp</item>
+    </style>
+
+    <style name="TextAppearance.DoorHanger.Medium.Light">
+        <item name="android:fontFamily">sans-serif-light</item>
+    </style>
+
+    <style name="TextAppearance.DoorHanger.Small">
+        <item name="android:textSize">14sp</item>
     </style>
 
     <style name="TextAppearance.UrlBar.Title" parent="TextAppearance.Small">
@@ -814,17 +821,6 @@
 
     <style name="FloatingHintEditText" parent="android:style/Widget.EditText">
         <item name="android:paddingTop">0dp</item>
-    </style>
-
-    <!-- Make the share overlay activity appear like an overlay. -->
-    <style name="ShareOverlayActivity">
-        <item name="android:windowBackground">@android:color/transparent</item>
-        <item name="android:windowNoTitle">true</item>
-        <item name="android:windowIsTranslucent">true</item>
-        <item name="android:backgroundDimEnabled">true</item>
-
-        <!-- We display the overlay on top of other Activities so show their status bar. -->
-        <item name="android:statusBarColor">@android:color/transparent</item>
     </style>
 
     <style name="TextAppearance.FirstrunLight"/>

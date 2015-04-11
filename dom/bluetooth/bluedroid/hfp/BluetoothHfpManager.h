@@ -172,7 +172,12 @@ private:
 
   BluetoothHfpManager();
   bool Init();
+
+#ifdef MOZ_B2G_BT_API_V2
+  // Removed in bluetooth2
+#else
   void Cleanup();
+#endif
 
   void HandleShutdown();
   void HandleVolumeChanged(nsISupports* aSubject);
@@ -209,6 +214,7 @@ private:
   int mCurrentVgm;
   bool mReceiveVgsFlag;
   bool mDialingRequestProcessed;
+  bool mFirstCKPD;
   PhoneType mPhoneType;
   nsString mDeviceAddress;
   nsString mMsisdn;

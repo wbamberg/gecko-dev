@@ -21,6 +21,10 @@ XPCOMUtils.defineLazyModuleGetter(this, "ReadingList",
 XPCOMUtils.defineLazyModuleGetter(this, "ServerClient",
   "resource:///modules/readinglist/ServerClient.jsm");
 
+// The maximum number of sub-requests per POST /batch supported by the server.
+// See http://readinglist.readthedocs.org/en/latest/api/batch.html.
+const BATCH_REQUEST_LIMIT = 25;
+
 // The Last-Modified header of server responses is stored here.
 const SERVER_LAST_MODIFIED_HEADER_PREF = "readinglist.sync.serverLastModified";
 
@@ -180,21 +184,14 @@ SyncImpl.prototype = {
 
     // Send the request.
     let request = {
-      method: "POST",
-      path: "/batch",
       body: {
         defaults: {
           method: "PATCH",
         },
         requests: requests,
       },
-      headers: {},
     };
-    if (this._serverLastModifiedHeader) {
-      request.headers["If-Unmodified-Since"] = this._serverLastModifiedHeader;
-    }
-
-    let batchResponse = yield this._sendRequest(request);
+    let batchResponse = yield this._postBatch(request);
     if (batchResponse.status != 200) {
       this._handleUnexpectedResponse("uploading changes", batchResponse);
       return;
@@ -207,11 +204,10 @@ SyncImpl.prototype = {
         yield this._deleteItemForGUID(response.body.id);
         continue;
       }
-      if (response.status == 412 || response.status == 409) {
-        // 412 Precondition failed: The item was modified since the last sync.
-        // 409 Conflict: A change violated a uniqueness constraint.
-        // In either case, mark the item as having material changes, and
-        // reconcile and upload it in the material-changes phase.
+      if (response.status == 409) {
+        // "Conflict": A change violated a uniqueness constraint.  Mark the item
+        // as having material changes, and reconcile and upload it in the
+        // material-changes phase.
         // TODO
         continue;
       }
@@ -219,6 +215,10 @@ SyncImpl.prototype = {
         this._handleUnexpectedResponse("uploading a change", response);
         continue;
       }
+      // Don't assume the local record and the server record aren't materially
+      // different.  Reconcile the differences.
+      // TODO
+
       let item = yield this._itemForGUID(response.body.id);
       yield this._updateItemWithServerRecord(item, response.body);
     }
@@ -246,8 +246,6 @@ SyncImpl.prototype = {
 
     // Send the request.
     let request = {
-      method: "POST",
-      path: "/batch",
       body: {
         defaults: {
           method: "POST",
@@ -255,13 +253,8 @@ SyncImpl.prototype = {
         },
         requests: requests,
       },
-      headers: {},
     };
-    if (this._serverLastModifiedHeader) {
-      request.headers["If-Unmodified-Since"] = this._serverLastModifiedHeader;
-    }
-
-    let batchResponse = yield this._sendRequest(request);
+    let batchResponse = yield this._postBatch(request);
     if (batchResponse.status != 200) {
       this._handleUnexpectedResponse("uploading new items", batchResponse);
       return;
@@ -278,8 +271,13 @@ SyncImpl.prototype = {
       }
       // Note that the server seems to return a 200 if an identical item already
       // exists, but we shouldn't be uploading identical items in this phase in
-      // normal usage, so treat 200 as an unexpected response.
-      if (response.status != 201) {
+      // normal usage. But if something goes wrong locally (eg, we upload but
+      // get some error even though the upload worked) we will see this.
+      // So allow 200 but log a warning.
+      if (response.status == 200) {
+        log.debug("Attempting to upload a new item found the server already had it", response);
+        // but we still process it.
+      } else if (response.status != 201) {
         this._handleUnexpectedResponse("uploading a new item", response);
         continue;
       }
@@ -298,9 +296,9 @@ SyncImpl.prototype = {
 
     // Get deleted synced local items.
     let requests = [];
-    yield this.list.forEachSyncedDeletedItem(localItem => {
+    yield this.list.forEachSyncedDeletedGUID(guid => {
       requests.push({
-        path: "/articles/" + localItem.guid,
+        path: "/articles/" + guid,
       });
     });
     if (!requests.length) {
@@ -310,21 +308,14 @@ SyncImpl.prototype = {
 
     // Send the request.
     let request = {
-      method: "POST",
-      path: "/batch",
       body: {
         defaults: {
           method: "DELETE",
         },
         requests: requests,
       },
-      headers: {},
     };
-    if (this._serverLastModifiedHeader) {
-      request.headers["If-Unmodified-Since"] = this._serverLastModifiedHeader;
-    }
-
-    let batchResponse = yield this._sendRequest(request);
+    let batchResponse = yield this._postBatch(request);
     if (batchResponse.status != 200) {
       this._handleUnexpectedResponse("uploading deleted items", batchResponse);
       return;
@@ -332,13 +323,6 @@ SyncImpl.prototype = {
 
     // Delete local items based on the response.
     for (let response of batchResponse.body.responses) {
-      if (response.status == 412) {
-        // "Precondition failed": The item was modified since the last sync.
-        // Mark the item as having material changes, and reconcile and upload it
-        // in the material-changes phase.
-        // TODO
-        continue;
-      }
       // A 404 means the item was already deleted on the server, which is OK.
       // We still need to make sure it's deleted locally, though.
       if (response.status != 200 && response.status != 404) {
@@ -365,18 +349,8 @@ SyncImpl.prototype = {
     let request = {
       method: "GET",
       path: path,
-      headers: {},
     };
-    if (this._serverLastModifiedHeader) {
-      request.headers["If-Modified-Since"] = this._serverLastModifiedHeader;
-    }
-
     let response = yield this._sendRequest(request);
-    if (response.status == 304) {
-      // not modified
-      log.debug("No server changes");
-      return;
-    }
     if (response.status != 200) {
       this._handleUnexpectedResponse("downloading modified items", response);
       return;
@@ -384,6 +358,11 @@ SyncImpl.prototype = {
 
     // Update local items based on the response.
     for (let serverRecord of response.body.items) {
+      if (serverRecord.deleted) {
+        // _deleteItemForGUID is a no-op if no item exists with the GUID.
+        yield this._deleteItemForGUID(serverRecord.id);
+        continue;
+      }
       let localItem = yield this._itemForGUID(serverRecord.id);
       if (localItem) {
         if (localItem.serverLastModified == serverRecord.last_modified) {
@@ -396,15 +375,30 @@ SyncImpl.prototype = {
         // the material-changes phase.
         // TODO
 
-        if (serverRecord.deleted) {
-          yield this._deleteItemForGUID(serverRecord.id);
-          continue;
-        }
         yield this._updateItemWithServerRecord(localItem, serverRecord);
         continue;
       }
-      // new item
-      yield this.list.addItem(localRecordFromServerRecord(serverRecord));
+      // A potentially new item.  addItem() will fail here when an item was
+      // added to the local list between the time we uploaded new items and
+      // now.
+      let localRecord = localRecordFromServerRecord(serverRecord);
+      try {
+        yield this.list.addItem(localRecord);
+      } catch (ex) {
+        if (ex instanceof ReadingList.Error.Exists) {
+          log.debug("Tried to add an item that already exists.");
+        } else {
+          log.error("Error adding an item from server record ${serverRecord} ${ex}",
+                    { serverRecord, ex });
+        }
+      }
+    }
+
+    // Now that changes have been successfully applied, advance the server
+    // last-modified timestamp so that next time we fetch items starting from
+    // the current point.  Response header names are lowercase.
+    if (response.headers && "last-modified" in response.headers) {
+      this._serverLastModifiedHeader = response.headers["last-modified"];
     }
   }),
 
@@ -439,10 +433,25 @@ SyncImpl.prototype = {
    */
   _updateItemWithServerRecord: Task.async(function* (localItem, serverRecord) {
     if (!localItem) {
-      throw new Error("Item should exist");
+      // The item may have been deleted from the local list between the time we
+      // saw that it needed updating and now.
+      log.debug("Tried to update a null local item from server record",
+                serverRecord);
+      return;
     }
     localItem._record = localRecordFromServerRecord(serverRecord);
-    yield this.list.updateItem(localItem);
+    try {
+      yield this.list.updateItem(localItem);
+    } catch (ex) {
+      // The item may have been deleted from the local list after we fetched it.
+      if (ex instanceof ReadingList.Error.Deleted) {
+        log.debug("Tried to update an item that was deleted from server record",
+                  serverRecord);
+      } else {
+        log.error("Error updating an item from server record ${serverRecord} ${ex}",
+                  { serverRecord, ex });
+      }
+    }
   }),
 
   /**
@@ -458,7 +467,12 @@ SyncImpl.prototype = {
       // consumers are notified properly.  Set the syncStatus to NEW so that the
       // list truly deletes the item.
       item._record.syncStatus = ReadingList.SyncStatus.NEW;
-      yield this.list.deleteItem(item);
+      try {
+        yield this.list.deleteItem(item);
+      } catch (ex) {
+        log.error("Failed delete local item with id ${guid} ${ex}",
+                  { guid, ex });
+      }
       return;
     }
     // If item is null, then it may not actually exist locally, or it may have
@@ -466,7 +480,12 @@ SyncImpl.prototype = {
     // that case, try to delete it directly from the store.  As far as the list
     // is concerned, the item has already been deleted.
     log.debug("Item not present in list, deleting it by GUID instead");
-    this.list._store.deleteItemByGUID(guid);
+    try {
+      this.list._store.deleteItemByGUID(guid);
+    } catch (ex) {
+      log.error("Failed to delete local item with id ${guid} ${ex}",
+                { guid, ex });
+    }
   }),
 
   /**
@@ -480,15 +499,55 @@ SyncImpl.prototype = {
     log.debug("Sending request", req);
     let response = yield this._client.request(req);
     log.debug("Received response", response);
-    // Response header names are lowercase.
-    if (response.headers && "last-modified" in response.headers) {
-      this._serverLastModifiedHeader = response.headers["last-modified"];
-    }
     return response;
   }),
 
+  /**
+   * The server limits the number of sub-requests in POST /batch'es to
+   * BATCH_REQUEST_LIMIT.  This method takes an arbitrarily big batch request
+   * and breaks it apart into many individual batch requests in order to stay
+   * within the limit.
+   *
+   * @param bigRequest The same type of request object that _sendRequest takes.
+   *        Since it's a POST /batch request, its `body` should have a
+   *        `requests` property whose value is an array of sub-requests.
+   *        `method` and `path` are automatically filled.
+   * @return Promise<response> Resolved when all requests complete with 200s, or
+   *         when the first response that is not a 200 is received.  In the
+   *         first case, the resolved response is a combination of all the
+   *         server responses, and response.body.responses contains the sub-
+   *         responses for all the sub-requests in bigRequest.  In the second
+   *         case, the resolved response is the non-200 response straight from
+   *         the server.
+   */
+  _postBatch: Task.async(function* (bigRequest) {
+    log.debug("Sending batch requests");
+    let allSubResponses = [];
+    let remainingSubRequests = bigRequest.body.requests;
+    while (remainingSubRequests.length) {
+      let request = Object.assign({}, bigRequest);
+      request.method = "POST";
+      request.path = "/batch";
+      request.body.requests =
+        remainingSubRequests.splice(0, BATCH_REQUEST_LIMIT);
+      let response = yield this._sendRequest(request);
+      if (response.status != 200) {
+        return response;
+      }
+      allSubResponses = allSubResponses.concat(response.body.responses);
+    }
+    let bigResponse = {
+      status: 200,
+      body: {
+        responses: allSubResponses,
+      },
+    };
+    log.debug("All batch requests successfully sent");
+    return bigResponse;
+  }),
+
   _handleUnexpectedResponse(contextMsgFragment, response) {
-    log.warn(`Unexpected response ${contextMsgFragment}`, response);
+    log.error(`Unexpected response ${contextMsgFragment}`, response);
   },
 
   // TODO: Wipe this pref when user logs out.

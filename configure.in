@@ -50,7 +50,7 @@ _SUBDIR_CONFIG_ARGS="$ac_configure_args"
 dnl Set the version number of the libs included with mozilla
 dnl ========================================================
 MOZJPEG=62
-MOZPNG=10616
+MOZPNG=10617
 NSPR_VERSION=4
 NSPR_MINVER=4.10.8
 NSS_VERSION=3
@@ -288,7 +288,7 @@ if test -n "$gonkdir" ; then
         AC_DEFINE(MOZ_AUDIO_OFFLOAD)
         MOZ_FMP4=1
         ;;
-    21)
+    21|22)
         GONK_INCLUDES="-I$gonkdir/frameworks/native/include -I$gonkdir/frameworks/av/include -I$gonkdir/frameworks/av/include/media -I$gonkdir/frameworks/av/include/camera -I$gonkdir/frameworks/native/include/media/openmax -I$gonkdir/frameworks/av/media/libstagefright/include"
         MOZ_AUDIO_OFFLOAD=1
         MOZ_OMX_DECODER=1
@@ -2347,22 +2347,6 @@ ia64*-hpux*)
         ;;
     esac
 
-    case "$host" in
-    *-mingw*)
-        if test -z "$MOZ_TOOLS"; then
-            AC_MSG_ERROR([MOZ_TOOLS is not set])
-        fi
-        MOZ_TOOLS_DIR=`cd $MOZ_TOOLS && pwd -W`
-        if test "$?" != "0" -o -z "$MOZ_TOOLS_DIR"; then
-            AC_MSG_ERROR([cd \$MOZ_TOOLS failed. MOZ_TOOLS ==? $MOZ_TOOLS])
-        fi
-        MOZ_TOOLS_BIN_DIR="$(cd "$MOZ_TOOLS_DIR/bin" && pwd)"
-        if test `echo ${PATH}: | grep -ic "$MOZ_TOOLS_BINDIR:"` = 0; then
-            AC_MSG_ERROR([\$MOZ_TOOLS\\bin must be in your path.])
-        fi
-        ;;
-    esac
-
     case "$host_os" in
     cygwin*|msvc*|mks*)
         AC_MSG_ERROR([Using a Cygwin build environment is unsupported. Configure cannot check for presence of necessary headers. Please upgrade to MozillaBuild; see https://developer.mozilla.org/en/Windows_Build_Prerequisites.])
@@ -2727,6 +2711,7 @@ MOZ_CHECK_HEADERS([linux/quota.h],,,[#include <sys/socket.h>])
 
 dnl SCTP support - needs various network include headers
 MOZ_CHECK_HEADERS([linux/if_addr.h linux/rtnetlink.h],,,[#include <sys/socket.h>])
+MOZ_CHECK_HEADERS(sys/queue.h)
 
 MOZ_CHECK_HEADERS(sys/types.h netinet/in.h byteswap.h)
 
@@ -5703,12 +5688,18 @@ MOZ_ARG_DISABLE_BOOL(permissions,
     MOZ_PERMISSIONS=1
 )
 
+AC_SUBST(MOZ_PERMISSIONS)
+if test -n "$MOZ_PERMISSIONS"; then
+    AC_DEFINE(MOZ_PERMISSIONS)
+fi
+
 dnl ========================================================
 dnl Child permissions, currently only used for b2g
 dnl ========================================================
 if test -n "$MOZ_B2G"; then
     if test -n "$MOZ_PERMISSIONS"; then
         MOZ_CHILD_PERMISSIONS=1
+        AC_DEFINE(MOZ_CHILD_PERMISSIONS)
     else
         AC_MSG_ERROR([You need to enable MOZ_PERMISSIONS for MOZ_CHILD_PERMISSIONS])
     fi
@@ -6418,11 +6409,7 @@ MOZ_ARG_ENABLE_BOOL(verify-mar,
     MOZ_VERIFY_MAR_SIGNATURE= )
 
 if test -n "$MOZ_VERIFY_MAR_SIGNATURE"; then
-  if test "$OS_ARCH" = "WINNT"; then
-    AC_DEFINE(MOZ_VERIFY_MAR_SIGNATURE)
-  else
-    AC_MSG_ERROR([Can only build with --enable-verify-mar with a Windows target])
-  fi
+  AC_DEFINE(MOZ_VERIFY_MAR_SIGNATURE)
 fi
 
 dnl ========================================================
@@ -6955,6 +6942,7 @@ elif test "$GNU_CC"; then
     # -Wmaybe-uninitialized - too many false positives
     # -Wdeprecated-declarations - we don't want our builds held hostage when a
     #   platform-specific API becomes deprecated.
+    # -Wfree-nonheap-object - false positives during PGO
     MOZ_C_SUPPORTS_WARNING(-W, no-error=uninitialized, ac_c_has_noerror_uninitialized)
     MOZ_CXX_SUPPORTS_WARNING(-W, no-error=uninitialized, ac_cxx_has_noerror_uninitialized)
     MOZ_C_SUPPORTS_WARNING(-W, no-error=maybe-uninitialized, ac_c_has_noerror_maybe_uninitialized)
@@ -6965,6 +6953,8 @@ elif test "$GNU_CC"; then
     if test -n "$MOZ_PGO"; then
         MOZ_C_SUPPORTS_WARNING(-W, no-error=coverage-mismatch, ac_c_has_noerror_coverage_mismatch)
         MOZ_CXX_SUPPORTS_WARNING(-W, no-error=coverage-mismatch, ac_cxx_has_noerror_coverage_mismatch)
+        MOZ_C_SUPPORTS_WARNING(-W, no-error=free-nonheap-object, ac_c_has_noerror_free_nonheap_object)
+        MOZ_CXX_SUPPORTS_WARNING(-W, no-error=free-nonheap-object, ac_cxx_has_noerror_free_nonheap_object)
     fi
 fi
 
@@ -8428,7 +8418,6 @@ AC_SUBST(BIN_FLAGS)
 AC_SUBST(MOZ_WIDGET_TOOLKIT)
 AC_SUBST(MOZ_UPDATE_XTERM)
 AC_SUBST(MOZ_AUTH_EXTENSION)
-AC_SUBST(MOZ_PERMISSIONS)
 AC_SUBST(MOZ_PREF_EXTENSIONS)
 AC_SUBST(MOZ_DEBUG)
 AC_SUBST(MOZ_DEBUG_SYMBOLS)
@@ -8610,7 +8599,11 @@ fi
 IS_ALPHA=`echo $MOZ_APP_VERSION | grep a`
 if test -z "$IS_ALPHA"; then
   changequote(,)
-  MOZ_APP_MAXVERSION=`echo $MOZ_APP_VERSION | sed "s|\(^[0-9]*\).*|\1|"`.*
+  if test "$(basename $MOZ_BUILD_APP)" = "suite"; then
+    MOZ_APP_MAXVERSION=`echo $MOZ_APP_VERSION | sed "s|\(^[0-9]*\.[0-9]*\).*|\1|"`.*
+  else
+    MOZ_APP_MAXVERSION=`echo $MOZ_APP_VERSION | sed "s|\(^[0-9]*\).*|\1|"`.*
+  fi
   changequote([,])
 else
   MOZ_APP_MAXVERSION=$MOZ_APP_VERSION
@@ -8678,7 +8671,6 @@ fi
 
 dnl win32 options
 AC_SUBST(MOZ_BROWSE_INFO)
-AC_SUBST(MOZ_TOOLS_DIR)
 AC_SUBST(WIN32_REDIST_DIR)
 AC_SUBST(MAKENSISU)
 
@@ -8993,10 +8985,6 @@ fi
 
 if test "$MOZ_WIDGET_TOOLKIT" = "cocoa"; then
     USE_ICU=1
-fi
-
-if test "$OS_TARGET" = WINNT; then
-    MOZ_SHARED_ICU=1
 fi
 
 MOZ_CONFIG_ICU()

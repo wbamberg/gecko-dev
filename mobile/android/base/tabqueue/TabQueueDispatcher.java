@@ -7,7 +7,10 @@ package org.mozilla.gecko.tabqueue;
 
 import org.mozilla.gecko.AppConstants;
 import org.mozilla.gecko.BrowserApp;
+import org.mozilla.gecko.GeckoAppShell;
+import org.mozilla.gecko.GeckoSharedPrefs;
 import org.mozilla.gecko.Locales;
+import org.mozilla.gecko.preferences.GeckoPreferences;
 import org.mozilla.gecko.sync.setup.activities.WebURLFinder;
 
 import android.content.Intent;
@@ -27,6 +30,8 @@ public class TabQueueDispatcher extends Locales.LocaleAwareActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        GeckoAppShell.ensureCrashHandling();
 
         Intent intent = getIntent();
 
@@ -51,7 +56,13 @@ public class TabQueueDispatcher extends Locales.LocaleAwareActivity {
             return;
         }
 
-        showToast(intent);
+        boolean shouldShowOpenInBackgroundToast = GeckoSharedPrefs.forApp(this).getBoolean(GeckoPreferences.PREFS_TAB_QUEUE, false);
+
+        if (shouldShowOpenInBackgroundToast) {
+            showToast(intent);
+        } else {
+            loadNormally(intent);
+        }
     }
 
     private void showToast(Intent intent) {

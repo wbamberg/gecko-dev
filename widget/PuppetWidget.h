@@ -78,7 +78,7 @@ public:
                                int32_t* aY) override
   { *aX = kMaxDimension;  *aY = kMaxDimension;  return NS_OK; }
 
-  // We're always at <0, 0>, and so ignore move requests.
+  // Widget position is controlled by the parent process via TabChild.
   NS_IMETHOD Move(double aX, double aY) override
   { return NS_OK; }
 
@@ -90,8 +90,14 @@ public:
                     double aWidth,
                     double aHeight,
                     bool   aRepaint) override
-  // (we're always at <0, 0>)
-  { return Resize(aWidth, aHeight, aRepaint); }
+  {
+    if (mBounds.x != aX || mBounds.y != aY) {
+      NotifyWindowMoved(aX, aY);
+    }
+    mBounds.x = aX;
+    mBounds.y = aY;
+    return Resize(aWidth, aHeight, aRepaint);
+  }
 
   // XXX/cjones: copying gtk behavior here; unclear what disabling a
   // widget is supposed to entail
@@ -117,13 +123,17 @@ public:
   NS_IMETHOD ReparentNativeWidget(nsIWidget* aNewParent) override
   { return NS_ERROR_UNEXPECTED; }
 
-  // PuppetWidgets don't have any concept of titles. 
+  // PuppetWidgets don't have any concept of titles.
   NS_IMETHOD SetTitle(const nsAString& aTitle) override
   { return NS_ERROR_UNEXPECTED; }
-  
-  // PuppetWidgets are always at <0, 0>.
+
   virtual mozilla::LayoutDeviceIntPoint WidgetToScreenOffset() override
-  { return mozilla::LayoutDeviceIntPoint(0, 0); }
+  { return LayoutDeviceIntPoint::FromUntyped(GetWindowPosition() + GetChromeDimensions()); }
+
+  // Synthesized mouse events we need to forwarded to chrome. Event
+  // state manager uses this api to position the mouse in the center
+  // of the window for pointer lock.
+  virtual nsresult SynthesizeNativeMouseMove(mozilla::LayoutDeviceIntPoint aPoint) override;
 
   void InitEvent(WidgetGUIEvent& aEvent, nsIntPoint* aPoint = nullptr);
 
@@ -197,6 +207,8 @@ public:
 
   // Get the screen position of the application window.
   nsIntPoint GetWindowPosition();
+
+  NS_IMETHOD GetScreenBounds(nsIntRect &aRect) override;
 
   NS_IMETHOD StartPluginIME(const mozilla::WidgetKeyboardEvent& aKeyboardEvent,
                             int32_t aPanelX, int32_t aPanelY,

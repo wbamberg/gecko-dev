@@ -28,7 +28,6 @@
 #include "FrameMetrics.h"
 #include "mozilla/UniquePtr.h"
 #include "mozilla/gfx/UserData.h"
-#include "gfxVR.h"
 
 #include <stdint.h>
 #include "nsTHashtable.h"
@@ -49,6 +48,9 @@ namespace layers {
 class Layer;
 class ImageLayer;
 class ImageContainer;
+} //namespace
+namespace gfx {
+class VRHMDInfo;
 } //namespace
 } //namespace
 
@@ -1668,14 +1670,10 @@ public:
   uint32_t Count() const;
   /**
    * Stable sort the list by the z-order of GetUnderlyingFrame() on
-   * each item. 'auto' is counted as zero. Content order is used as the
-   * secondary order.
-   * @param aCommonAncestor a common ancestor of all the content elements
-   * associated with the display items, for speeding up tree order
-   * checks, or nullptr if not known; it's only a hint, if it is not an
-   * ancestor of some elements, then we lose performance but not correctness
+   * each item. 'auto' is counted as zero.
+   * It is assumed that the list is already in content document order.
    */
-  void SortByZOrder(nsDisplayListBuilder* aBuilder, nsIContent* aCommonAncestor);
+  void SortByZOrder(nsDisplayListBuilder* aBuilder);
   /**
    * Stable sort the list by the tree order of the content of
    * GetUnderlyingFrame() on each item. z-index is ignored.
@@ -1685,6 +1683,13 @@ public:
    * ancestor of some elements, then we lose performance but not correctness
    */
   void SortByContentOrder(nsDisplayListBuilder* aBuilder, nsIContent* aCommonAncestor);
+  /**
+   * Stable sort this list by CSS 'order' property order.
+   * http://dev.w3.org/csswg/css-flexbox-1/#order-property
+   * (also applies to CSS Grid although it's in the Flexbox spec ATM)
+   * It is assumed that the list is already in document content order.
+   */
+  void SortByCSSOrder(nsDisplayListBuilder* aBuilder);
 
   /**
    * Generic stable sort. Take care, because some of the items might be nsDisplayLists
@@ -1957,6 +1962,8 @@ private:
 
 class nsDisplayImageContainer : public nsDisplayItem {
 public:
+  typedef mozilla::LayerIntPoint LayerIntPoint;
+  typedef mozilla::LayoutDeviceRect LayoutDeviceRect;
   typedef mozilla::layers::ImageContainer ImageContainer;
   typedef mozilla::layers::ImageLayer ImageLayer;
 
@@ -1966,7 +1973,8 @@ public:
 
   virtual already_AddRefed<ImageContainer> GetContainer(LayerManager* aManager,
                                                         nsDisplayListBuilder* aBuilder) = 0;
-  virtual void ConfigureLayer(ImageLayer* aLayer, const nsIntPoint& aOffset) = 0;
+  virtual void ConfigureLayer(ImageLayer* aLayer,
+                              const ContainerLayerParameters& aParameters) = 0;
 
   virtual bool SupportsOptimizingToImage() override { return true; }
 };
@@ -2314,7 +2322,8 @@ public:
   
   virtual already_AddRefed<ImageContainer> GetContainer(LayerManager* aManager,
                                                         nsDisplayListBuilder *aBuilder) override;
-  virtual void ConfigureLayer(ImageLayer* aLayer, const nsIntPoint& aOffset) override;
+  virtual void ConfigureLayer(ImageLayer* aLayer,
+                              const ContainerLayerParameters& aParameters) override;
 
   static nsRegion GetInsideClipRegion(nsDisplayItem* aItem, nsPresContext* aPresContext, uint8_t aClip,
                                       const nsRect& aRect, bool* aSnap);
@@ -2339,7 +2348,7 @@ protected:
   const nsStyleBackground* mBackgroundStyle;
   /* If this background can be a simple image layer, we store the format here. */
   nsRefPtr<ImageContainer> mImageContainer;
-  gfxRect mDestRect;
+  LayoutDeviceRect mDestRect;
   /* Bounds of this display item */
   nsRect mBounds;
   uint32_t mLayer;

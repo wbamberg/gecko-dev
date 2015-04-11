@@ -226,6 +226,7 @@
 #include "nsLocation.h"
 #include "mozilla/dom/FontFaceSet.h"
 #include "mozilla/dom/BoxObject.h"
+#include "gfxVR.h"
 
 #ifdef MOZ_MEDIA_NAVIGATOR
 #include "mozilla/MediaManager.h"
@@ -10087,7 +10088,7 @@ nsDocument::ScrollToRef()
   nsUnescape(tmpstr);
   nsAutoCString unescapedRef;
   unescapedRef.Assign(tmpstr);
-  nsMemory::Free(tmpstr);
+  free(tmpstr);
 
   nsresult rv = NS_ERROR_FAILURE;
   // We assume that the bytes are in UTF-8, as it says in the spec:
@@ -11373,6 +11374,10 @@ bool
 nsDocument::IsFullScreenDoc()
 {
   return GetFullScreenElement() != nullptr;
+}
+
+FullScreenOptions::FullScreenOptions()
+{
 }
 
 class nsCallRequestFullScreen : public nsRunnable

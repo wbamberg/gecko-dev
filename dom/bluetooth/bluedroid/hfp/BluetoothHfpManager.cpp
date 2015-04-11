@@ -17,14 +17,13 @@
 #include "nsContentUtils.h"
 #include "nsIAudioManager.h"
 #include "nsIIccInfo.h"
-#include "nsIIccProvider.h"
+#include "nsIIccService.h"
 #include "nsIMobileConnectionInfo.h"
 #include "nsIMobileConnectionService.h"
 #include "nsIMobileNetworkInfo.h"
 #include "nsIObserverService.h"
 #include "nsISettingsService.h"
 #include "nsITelephonyService.h"
-#include "nsRadioInterfaceLayer.h"
 #include "nsServiceManagerUtils.h"
 #include "nsThreadUtils.h"
 #include "mozilla/dom/BindingUtils.h"
@@ -209,6 +208,27 @@ BluetoothHfpManager::ResetCallArray()
   }
 }
 
+#ifdef MOZ_B2G_BT_API_V2
+void
+BluetoothHfpManager::Reset()
+{
+  mReceiveVgsFlag = false;
+  mDialingRequestProcessed = true;
+
+  mConnectionState = HFP_CONNECTION_STATE_DISCONNECTED;
+  mPrevConnectionState = HFP_CONNECTION_STATE_DISCONNECTED;
+  mAudioState = HFP_AUDIO_STATE_DISCONNECTED;
+
+  // Phone & Device CIND
+  ResetCallArray();
+  mBattChg = 5;
+  mService = HFP_NETWORK_STATE_NOT_AVAILABLE;
+  mRoam = HFP_SERVICE_TYPE_HOME;
+  mSignal = 0;
+
+  mController = nullptr;
+}
+#else
 void
 BluetoothHfpManager::Cleanup()
 {
@@ -228,16 +248,25 @@ BluetoothHfpManager::Cleanup()
 void
 BluetoothHfpManager::Reset()
 {
+  mFirstCKPD = false;
   // Phone & Device CIND
   ResetCallArray();
   // Clear Sco state
   mAudioState = HFP_AUDIO_STATE_DISCONNECTED;
   Cleanup();
 }
+#endif
 
 bool
 BluetoothHfpManager::Init()
 {
+#ifdef MOZ_B2G_BT_API_V2
+  // The function must run at b2g process since it would access SettingsService.
+  MOZ_ASSERT(IsMainProcess());
+#else
+  // Missing on bluetooth1
+#endif
+
   MOZ_ASSERT(NS_IsMainThread());
 
   nsCOMPtr<nsIObserverService> obs = services::GetObserverService();
@@ -595,7 +624,11 @@ BluetoothHfpManager::NotifyConnectionStateChanged(const nsAString& aType)
       } else {
         OnDisconnect(EmptyString());
       }
+#ifdef MOZ_B2G_BT_API_V2
+      Reset();
+#else
       Cleanup();
+#endif
     }
   }
 }
@@ -686,6 +719,16 @@ BluetoothHfpManager::HandleVoiceConnectionChanged(uint32_t aClientId)
   nsString regState;
   voiceInfo->GetState(regState);
 
+#ifdef MOZ_B2G_BT_API_V2
+  BluetoothHandsfreeNetworkState service =
+    (regState.EqualsLiteral("registered")) ? HFP_NETWORK_STATE_AVAILABLE :
+                                             HFP_NETWORK_STATE_NOT_AVAILABLE;
+  if (service != mService) {
+    // Notify BluetoothRilListener of service change
+    mListener->ServiceChanged(aClientId, service);
+  }
+  mService = service;
+#else
   int service = (regState.EqualsLiteral("registered")) ? 1 : 0;
   if (service != mService) {
     // Notify BluetoothRilListener of service change
@@ -693,6 +736,7 @@ BluetoothHfpManager::HandleVoiceConnectionChanged(uint32_t aClientId)
   }
   mService = service ? HFP_NETWORK_STATE_AVAILABLE :
                        HFP_NETWORK_STATE_NOT_AVAILABLE;
+#endif
 
   // Signal
   JS::Rooted<JS::Value> value(nsContentUtils::RootingCxForThread());
@@ -725,12 +769,16 @@ BluetoothHfpManager::HandleVoiceConnectionChanged(uint32_t aClientId)
 void
 BluetoothHfpManager::HandleIccInfoChanged(uint32_t aClientId)
 {
-  nsCOMPtr<nsIIccProvider> icc =
-    do_GetService(NS_RILCONTENTHELPER_CONTRACTID);
+  nsCOMPtr<nsIIccService> service =
+    do_GetService(ICC_SERVICE_CONTRACTID);
+  NS_ENSURE_TRUE_VOID(service);
+
+  nsCOMPtr<nsIIcc> icc;
+  service->GetIccByServiceId(aClientId, getter_AddRefs(icc));
   NS_ENSURE_TRUE_VOID(icc);
 
   nsCOMPtr<nsIIccInfo> iccInfo;
-  icc->GetIccInfo(aClientId, getter_AddRefs(iccInfo));
+  icc->GetIccInfo(getter_AddRefs(iccInfo));
   NS_ENSURE_TRUE_VOID(iccInfo);
 
   nsCOMPtr<nsIGsmIccInfo> gsmIccInfo = do_QueryInterface(iccInfo);
@@ -1286,6 +1334,8 @@ BluetoothHfpManager::OnConnect(const nsAString& aErrorStr)
 {
   MOZ_ASSERT(NS_IsMainThread());
 
+  mFirstCKPD = true;
+
   /**
    * On the one hand, notify the controller that we've done for outbound
    * connections. On the other hand, we do nothing for inbound connections.
@@ -1613,7 +1663,7 @@ BluetoothHfpManager::KeyPressedNotification(const nsAString& aBdAddress)
   // Refer to AOSP HeadsetStateMachine.processKeyPressed
   if (FindFirstCall(nsITelephonyService::CALL_STATE_INCOMING)
       && !hasActiveCall) {
-    /**
+    /*
      * Bluetooth HSP spec 4.2.2
      * There is an incoming call, notify Dialer to pick up the phone call
      * and SCO will be established after we get the CallStateChanged event
@@ -1622,13 +1672,22 @@ BluetoothHfpManager::KeyPressedNotification(const nsAString& aBdAddress)
     NotifyDialer(NS_LITERAL_STRING("ATA"));
   } else if (hasActiveCall) {
     if (!IsScoConnected()) {
-      /**
+      /*
        * Bluetooth HSP spec 4.3
        * If there's no SCO, set up a SCO link.
        */
       ConnectSco();
-    } else {
-      /**
+    } else if (mFirstCKPD) {
+      /*
+       * Bluetooth HSP spec 4.2 & 4.3
+       * The SCO link connection may be set up prior to receiving the AT+CKPD=200
+       * command from the HS.
+       *
+       * Once FxOS initiates a SCO connection before receiving the
+       * AT+CKPD=200, we should ignore this key press.
+       */
+     } else {
+      /*
        * Bluetooth HSP spec 4.5
        * There are two ways to release SCO: sending CHUP to dialer or closing
        * SCO socket directly. We notify dialer only if there is at least one
@@ -1636,6 +1695,7 @@ BluetoothHfpManager::KeyPressedNotification(const nsAString& aBdAddress)
        */
       NotifyDialer(NS_LITERAL_STRING("CHUP"));
     }
+    mFirstCKPD = false;
   } else {
     // BLDN
     mDialingRequestProcessed = false;

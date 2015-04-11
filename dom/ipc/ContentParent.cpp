@@ -28,6 +28,7 @@
 #include "AudioChannelService.h"
 #include "BlobParent.h"
 #include "CrashReporterParent.h"
+#include "GMPServiceParent.h"
 #include "IHistory.h"
 #include "mozIApplication.h"
 #ifdef ACCESSIBILITY
@@ -37,6 +38,7 @@
 #include "mozilla/ClearOnShutdown.h"
 #include "mozilla/docshell/OfflineCacheUpdateParent.h"
 #include "mozilla/dom/DataStoreService.h"
+#include "mozilla/dom/DataTransfer.h"
 #include "mozilla/dom/DOMStorageIPC.h"
 #include "mozilla/dom/Element.h"
 #include "mozilla/dom/File.h"
@@ -51,6 +53,7 @@
 #include "mozilla/dom/bluetooth/PBluetoothParent.h"
 #include "mozilla/dom/cellbroadcast/CellBroadcastParent.h"
 #include "mozilla/dom/devicestorage/DeviceStorageRequestParent.h"
+#include "mozilla/dom/icc/IccParent.h"
 #include "mozilla/dom/mobileconnection/MobileConnectionParent.h"
 #include "mozilla/dom/mobilemessage/SmsParent.h"
 #include "mozilla/dom/power/PowerManagerService.h"
@@ -101,6 +104,7 @@
 #include "nsIDocument.h"
 #include "nsIDOMGeoGeolocation.h"
 #include "nsIDOMGeoPositionError.h"
+#include "nsIDragService.h"
 #include "mozilla/dom/WakeLock.h"
 #include "nsIDOMWindow.h"
 #include "nsIExternalProtocolService.h"
@@ -224,6 +228,7 @@ using namespace CrashReporter;
 using namespace mozilla::dom::bluetooth;
 using namespace mozilla::dom::cellbroadcast;
 using namespace mozilla::dom::devicestorage;
+using namespace mozilla::dom::icc;
 using namespace mozilla::dom::indexedDB;
 using namespace mozilla::dom::power;
 using namespace mozilla::dom::mobileconnection;
@@ -231,6 +236,7 @@ using namespace mozilla::dom::mobilemessage;
 using namespace mozilla::dom::telephony;
 using namespace mozilla::dom::voicemail;
 using namespace mozilla::embedding;
+using namespace mozilla::gmp;
 using namespace mozilla::hal;
 using namespace mozilla::ipc;
 using namespace mozilla::layers;
@@ -241,7 +247,7 @@ using namespace mozilla::widget;
 #ifdef ENABLE_TESTS
 
 class BackgroundTester final : public nsIIPCBackgroundChildCreateCallback,
-                                   public nsIObserver
+                               public nsIObserver
 {
     static uint32_t sCallbackCount;
 
@@ -870,6 +876,27 @@ ContentParent::GetInitialProcessPriority(Element* aFrameElement)
                PROCESS_PRIORITY_FOREGROUND;
 }
 
+#if defined(XP_WIN)
+extern const wchar_t* kPluginWidgetContentParentProperty;
+
+/*static*/ void
+ContentParent::SendAsyncUpdate(nsIWidget* aWidget)
+{
+  if (!aWidget || aWidget->Destroyed()) {
+    return;
+  }
+  printf_stderr("TabParent::SendAsyncUpdate()\n");
+  // Fire off an async request to the plugin to paint its window
+  HWND hwnd = (HWND)aWidget->GetNativeData(NS_NATIVE_WINDOW);
+  NS_ASSERTION(hwnd, "Expected valid hwnd value.");
+  ContentParent* cp = reinterpret_cast<ContentParent*>(
+    ::GetPropW(hwnd, kPluginWidgetContentParentProperty));
+  if (cp && !cp->IsDestroyed()) {
+    cp->SendUpdateWindow((uintptr_t)hwnd);
+  }
+}
+#endif // defined(XP_WIN)
+
 bool
 ContentParent::PreallocatedProcessReady()
 {
@@ -980,17 +1007,38 @@ static nsIDocShell* GetOpenerDocShellHelper(Element* aFrameElement)
 }
 
 bool
-ContentParent::RecvLoadPlugin(const uint32_t& aPluginId, nsresult* aRv)
+ContentParent::RecvCreateGMPService()
+{
+    return PGMPService::Open(this);
+}
+
+bool
+ContentParent::RecvGetGMPPluginVersionForAPI(const nsCString& aAPI,
+                                             nsTArray<nsCString>&& aTags,
+                                             bool* aHasVersion,
+                                             nsCString* aVersion)
+{
+    return GMPServiceParent::RecvGetGMPPluginVersionForAPI(aAPI, Move(aTags),
+                                                           aHasVersion,
+                                                           aVersion);
+}
+
+bool
+ContentParent::RecvLoadPlugin(const uint32_t& aPluginId, nsresult* aRv, uint32_t* aRunID)
 {
     *aRv = NS_OK;
-    return mozilla::plugins::SetupBridge(aPluginId, this, false, aRv);
+    return mozilla::plugins::SetupBridge(aPluginId, this, false, aRv, aRunID);
 }
 
 bool
 ContentParent::RecvConnectPluginBridge(const uint32_t& aPluginId, nsresult* aRv)
 {
     *aRv = NS_OK;
-    return mozilla::plugins::SetupBridge(aPluginId, this, true, aRv);
+    // We don't need to get the run ID for the plugin, since we already got it
+    // in the first call to SetupBridge in RecvLoadPlugin, so we pass in a dummy
+    // pointer and just throw it away.
+    uint32_t dummy = 0;
+    return mozilla::plugins::SetupBridge(aPluginId, this, true, aRv, &dummy);
 }
 
 bool
@@ -1714,39 +1762,31 @@ ContentParent::OnBeginSyncTransaction() {
 void
 ContentParent::OnChannelConnected(int32_t pid)
 {
-    ProcessHandle handle;
-    if (!base::OpenPrivilegedProcessHandle(pid, &handle)) {
-        NS_WARNING("Can't open handle to child process.");
-    }
-    else {
-        // we need to close the existing handle before setting a new one.
-        base::CloseProcessHandle(OtherProcess());
-        SetOtherProcess(handle);
+    SetOtherProcessId(pid);
 
 #if defined(ANDROID) || defined(LINUX)
-        // Check nice preference
-        int32_t nice = Preferences::GetInt("dom.ipc.content.nice", 0);
+    // Check nice preference
+    int32_t nice = Preferences::GetInt("dom.ipc.content.nice", 0);
 
-        // Environment variable overrides preference
-        char* relativeNicenessStr = getenv("MOZ_CHILD_PROCESS_RELATIVE_NICENESS");
-        if (relativeNicenessStr) {
-            nice = atoi(relativeNicenessStr);
-        }
-
-        /* make the GUI thread have higher priority on single-cpu devices */
-        nsCOMPtr<nsIPropertyBag2> infoService = do_GetService(NS_SYSTEMINFO_CONTRACTID);
-        if (infoService) {
-            int32_t cpus;
-            nsresult rv = infoService->GetPropertyAsInt32(NS_LITERAL_STRING("cpucount"), &cpus);
-            if (NS_FAILED(rv)) {
-                cpus = 1;
-            }
-            if (nice != 0 && cpus == 1) {
-                setpriority(PRIO_PROCESS, pid, getpriority(PRIO_PROCESS, pid) + nice);
-            }
-        }
-#endif
+    // Environment variable overrides preference
+    char* relativeNicenessStr = getenv("MOZ_CHILD_PROCESS_RELATIVE_NICENESS");
+    if (relativeNicenessStr) {
+        nice = atoi(relativeNicenessStr);
     }
+
+    /* make the GUI thread have higher priority on single-cpu devices */
+    nsCOMPtr<nsIPropertyBag2> infoService = do_GetService(NS_SYSTEMINFO_CONTRACTID);
+    if (infoService) {
+        int32_t cpus;
+        nsresult rv = infoService->GetPropertyAsInt32(NS_LITERAL_STRING("cpucount"), &cpus);
+        if (NS_FAILED(rv)) {
+            cpus = 1;
+        }
+        if (nice != 0 && cpus == 1) {
+            setpriority(PRIO_PROCESS, pid, getpriority(PRIO_PROCESS, pid) + nice);
+        }
+    }
+#endif
 }
 
 void
@@ -2152,7 +2192,8 @@ ContentParent::ContentParent(mozIApplication* aApp,
     }
     mSubprocess->LaunchAndWaitForProcessHandle(extraArgs);
 
-    Open(mSubprocess->GetChannel(), mSubprocess->GetOwnedChildProcessHandle());
+    Open(mSubprocess->GetChannel(),
+         base::GetProcId(mSubprocess->GetChildProcessHandle()));
 
     InitInternal(aInitialPriority,
                  true, /* Setup off-main thread compositing */
@@ -2226,7 +2267,7 @@ ContentParent::ContentParent(ContentParent* aTemplate,
     CloneOpenedToplevels(aTemplate, aFds, aPid, &cloneContext);
 
     Open(mSubprocess->GetChannel(),
-         mSubprocess->GetChildProcessHandle());
+         base::GetProcId(mSubprocess->GetChildProcessHandle()));
 
     // Set the subprocess's priority (bg if we're a preallocated process, fg
     // otherwise).  We do this first because we're likely /lowering/ its CPU and
@@ -2253,9 +2294,6 @@ ContentParent::~ContentParent()
     if (mForceKillTimer) {
         mForceKillTimer->Cancel();
     }
-
-    if (OtherProcess())
-        base::CloseProcessHandle(OtherProcess());
 
     NS_ASSERTION(NS_IsMainThread(), "Wrong thread!");
 
@@ -3070,6 +3108,13 @@ ContentParent::RecvPDocAccessibleConstructor(PDocAccessibleParent* aDoc, PDocAcc
   return true;
 }
 
+PGMPServiceParent*
+ContentParent::AllocPGMPServiceParent(mozilla::ipc::Transport* aTransport,
+                                      base::ProcessId aOtherProcess)
+{
+    return GMPServiceParent::Create(aTransport, aOtherProcess);
+}
+
 PCompositorParent*
 ContentParent::AllocPCompositorParent(mozilla::ipc::Transport* aTransport,
                                       base::ProcessId aOtherProcess)
@@ -3301,19 +3346,26 @@ ContentParent::KillHard(const char* aReason)
         }
     }
 #endif
-    if (!KillProcess(OtherProcess(), 1, false)) {
+    ProcessHandle otherProcessHandle;
+    if (!base::OpenProcessHandle(OtherPid(), &otherProcessHandle)) {
+        NS_ERROR("Failed to open child process when attempting kill.");
+        return;
+    }
+
+    if (!KillProcess(otherProcessHandle, base::PROCESS_END_KILLED_BY_USER,
+                     false)) {
         NS_WARNING("failed to kill subprocess!");
     }
+
     if (mSubprocess) {
         mSubprocess->SetAlreadyDead();
     }
+
+    // EnsureProcessTerminated has responsibilty for closing otherProcessHandle.
     XRE_GetIOMessageLoop()->PostTask(
         FROM_HERE,
         NewRunnableFunction(&ProcessWatcher::EnsureProcessTerminated,
-                            OtherProcess(), /*force=*/true));
-    // We've now closed the OtherProcess() handle, so must set it to null to
-    // prevent our dtor closing it twice.
-    SetOtherProcess(0);
+                            otherProcessHandle, /*force=*/true));
 }
 
 bool
@@ -3384,6 +3436,27 @@ bool
 ContentParent::DeallocPHalParent(hal_sandbox::PHalParent* aHal)
 {
     delete aHal;
+    return true;
+}
+
+PIccParent*
+ContentParent::AllocPIccParent(const uint32_t& aServiceId)
+{
+    if (!AssertAppProcessPermission(this, "mobileconnection")) {
+        return nullptr;
+    }
+    IccParent* parent = new IccParent(aServiceId);
+    // We release this ref in DeallocPIccParent().
+    parent->AddRef();
+
+    return parent;
+}
+
+bool
+ContentParent::DeallocPIccParent(PIccParent* aActor)
+{
+    // IccParent is refcounted, must not be freed manually.
+    static_cast<IccParent*>(aActor)->Release();
     return true;
 }
 
@@ -4734,6 +4807,62 @@ ContentParent::RecvSetOfflinePermission(const Principal& aPrincipal)
     nsIPrincipal* principal = aPrincipal;
     nsContentUtils::MaybeAllowOfflineAppByDefault(principal, nullptr);
     return true;
+}
+
+void
+ContentParent::MaybeInvokeDragSession(TabParent* aParent)
+{
+  nsCOMPtr<nsIDragService> dragService =
+    do_GetService("@mozilla.org/widget/dragservice;1");
+  if (dragService && dragService->MaybeAddChildProcess(this)) {
+    // We need to send transferable data to child process.
+    nsCOMPtr<nsIDragSession> session;
+    dragService->GetCurrentSession(getter_AddRefs(session));
+    if (session) {
+      nsTArray<IPCDataTransfer> dataTransfers;
+      nsCOMPtr<nsIDOMDataTransfer> domTransfer;
+      session->GetDataTransfer(getter_AddRefs(domTransfer));
+      nsCOMPtr<DataTransfer> transfer = do_QueryInterface(domTransfer);
+      if (!transfer) {
+        // Pass NS_DRAGDROP_DROP to get DataTransfer with external
+        // drag formats cached.
+        transfer = new DataTransfer(nullptr, NS_DRAGDROP_DROP, true, -1);
+        session->SetDataTransfer(transfer);
+      }
+      // Note, even though this fills the DataTransfer object with
+      // external data, the data is usually transfered over IPC lazily when
+      // needed.
+      transfer->FillAllExternalData();
+      nsCOMPtr<nsILoadContext> lc = aParent ?
+                                     aParent->GetLoadContext() : nullptr;
+      nsCOMPtr<nsISupportsArray> transferables =
+        transfer->GetTransferables(lc);
+      nsContentUtils::TransferablesToIPCTransferables(transferables,
+                                                      dataTransfers,
+                                                      nullptr,
+                                                      this);
+      uint32_t action;
+      session->GetDragAction(&action);
+      mozilla::unused << SendInvokeDragSession(dataTransfers, action);
+    }
+  }
+}
+
+bool
+ContentParent::RecvUpdateDropEffect(const uint32_t& aDragAction,
+                                    const uint32_t& aDropEffect)
+{
+  nsCOMPtr<nsIDragSession> dragSession = nsContentUtils::GetDragSession();
+  if (dragSession) {
+    dragSession->SetDragAction(aDragAction);
+    nsCOMPtr<nsIDOMDataTransfer> dt;
+    dragSession->GetDataTransfer(getter_AddRefs(dt));
+    if (dt) {
+      dt->SetDropEffectInt(aDropEffect);
+    }
+    dragSession->UpdateDragEffect();
+  }
+  return true;
 }
 
 } // namespace dom

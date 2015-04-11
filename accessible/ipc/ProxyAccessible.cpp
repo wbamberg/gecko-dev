@@ -181,11 +181,13 @@ ProxyAccessible::SelectionCount()
   return count;
 }
 
-void
+bool
 ProxyAccessible::TextSubstring(int32_t aStartOffset, int32_t aEndOfset,
                                nsString& aText) const
 {
-  unused << mDoc->SendTextSubstring(mID, aStartOffset, aEndOfset, &aText);
+  bool valid;
+  unused << mDoc->SendTextSubstring(mID, aStartOffset, aEndOfset, &aText, &valid);
+  return valid;
 }
 
 void
@@ -333,34 +335,44 @@ ProxyAccessible::ReplaceText(const nsString& aText)
   unused << mDoc->SendReplaceText(mID, aText);
 }
 
-void
+bool
 ProxyAccessible::InsertText(const nsString& aText, int32_t aPosition)
 {
-  unused << mDoc->SendInsertText(mID, aText, aPosition);
+  bool valid;
+  unused << mDoc->SendInsertText(mID, aText, aPosition, &valid);
+  return valid;
 }
 
-void
+bool
 ProxyAccessible::CopyText(int32_t aStartPos, int32_t aEndPos)
 {
-  unused << mDoc->SendCopyText(mID, aStartPos, aEndPos);
+  bool valid;
+  unused << mDoc->SendCopyText(mID, aStartPos, aEndPos, &valid);
+  return valid;
 }
 
-void
+bool
 ProxyAccessible::CutText(int32_t aStartPos, int32_t aEndPos)
 {
-  unused << mDoc->SendCutText(mID, aStartPos, aEndPos);
+  bool valid;
+  unused << mDoc->SendCutText(mID, aStartPos, aEndPos, &valid);
+  return valid;
 }
 
-void
+bool
 ProxyAccessible::DeleteText(int32_t aStartPos, int32_t aEndPos)
 {
-  unused << mDoc->SendDeleteText(mID, aStartPos, aEndPos);
+  bool valid;
+  unused << mDoc->SendDeleteText(mID, aStartPos, aEndPos, &valid);
+  return valid;
 }
 
-void
+bool
 ProxyAccessible::PasteText(int32_t aPosition)
 {
-  unused << mDoc->SendPasteText(mID, aPosition);
+  bool valid;
+  unused << mDoc->SendPasteText(mID, aPosition, &valid);
+  return valid;
 }
 
 nsIntPoint
@@ -797,6 +809,149 @@ ProxyAccessible::UnselectAll()
   bool success = false;
   unused << mDoc->SendUnselectAll(mID, &success);
   return success;
+}
+
+bool
+ProxyAccessible::DoAction(uint8_t aIndex)
+{
+  bool success = false;
+  unused << mDoc->SendDoAction(mID, aIndex, &success);
+  return success;
+}
+
+uint8_t
+ProxyAccessible::ActionCount()
+{
+  uint8_t count = 0;
+  unused << mDoc->SendActionCount(mID, &count);
+  return count;
+}
+
+void
+ProxyAccessible::ActionDescriptionAt(uint8_t aIndex, nsString& aDescription)
+{
+  unused << mDoc->SendActionDescriptionAt(mID, aIndex, &aDescription);
+}
+
+void
+ProxyAccessible::ActionNameAt(uint8_t aIndex, nsString& aName)
+{
+  unused << mDoc->SendActionNameAt(mID, aIndex, &aName);
+}
+
+KeyBinding
+ProxyAccessible::AccessKey()
+{
+  uint32_t key = 0;
+  uint32_t modifierMask = 0;
+  unused << mDoc->SendAccessKey(mID, &key, &modifierMask);
+  return KeyBinding(key, modifierMask);
+}
+
+KeyBinding
+ProxyAccessible::KeyboardShortcut()
+{
+  uint32_t key = 0;
+  uint32_t modifierMask = 0;
+  unused << mDoc->SendKeyboardShortcut(mID, &key, &modifierMask);
+  return KeyBinding(key, modifierMask);
+}
+
+double
+ProxyAccessible::CurValue()
+{
+  double val = UnspecifiedNaN<double>();
+  unused << mDoc->SendCurValue(mID, &val);
+  return val;
+}
+
+bool
+ProxyAccessible::SetCurValue(double aValue)
+{
+  bool success = false;
+  unused << mDoc->SendSetCurValue(mID, aValue, &success);
+  return success;
+}
+
+double
+ProxyAccessible::MinValue()
+{
+  double val = UnspecifiedNaN<double>();
+  unused << mDoc->SendMinValue(mID, &val);
+  return val;
+}
+
+double
+ProxyAccessible::MaxValue()
+{
+  double val = UnspecifiedNaN<double>();
+  unused << mDoc->SendMaxValue(mID, &val);
+  return val;
+}
+
+double
+ProxyAccessible::Step()
+{
+  double step = UnspecifiedNaN<double>();
+  unused << mDoc->SendStep(mID, &step);
+  return step;
+}
+
+void
+ProxyAccessible::TakeFocus()
+{
+  unused << mDoc->SendTakeFocus(mID);
+}
+
+ProxyAccessible*
+ProxyAccessible::ChildAtPoint(int32_t aX, int32_t aY,
+                              Accessible::EWhichChildAtPoint aWhichChild)
+{
+  uint64_t childID = 0;
+  bool ok = false;
+  unused << mDoc->SendChildAtPoint(mID, aX, aY,
+                                   static_cast<uint32_t>(aWhichChild),
+                                   &childID, &ok);
+  return ok ? mDoc->GetAccessible(childID) : nullptr;
+}
+
+nsIntRect
+ProxyAccessible::Bounds()
+{
+  nsIntRect rect;
+  unused << mDoc->SendBounds(mID, &rect);
+  return rect;
+}
+
+void
+ProxyAccessible::Language(nsString& aLocale)
+{
+  unused << mDoc->SendLanguage(mID, &aLocale);
+}
+
+void
+ProxyAccessible::DocType(nsString& aType)
+{
+  unused << mDoc->SendDocType(mID, &aType);
+}
+
+void
+ProxyAccessible::URL(nsString& aURL)
+{
+  unused << mDoc->SendURL(mID, &aURL);
+}
+
+void
+ProxyAccessible::MimeType(nsString aMime)
+{
+  unused << mDoc->SendMimeType(mID, &aMime);
+}
+
+void
+ProxyAccessible::URLDocTypeMimeType(nsString& aURL, nsString& aDocType,
+                                    nsString& aMimeType)
+{
+  unused << mDoc->SendURLDocTypeMimeType(mID, &aURL, &aDocType, &aMimeType);
 }
 
 }

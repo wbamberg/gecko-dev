@@ -66,6 +66,7 @@
 #include "CounterStyleManager.h"
 #include "FrameLayerBuilder.h"
 #include "mozilla/dom/RequestSyncWifiService.h"
+#include "AnimationCommon.h"
 
 #include "AudioChannelService.h"
 #include "mozilla/dom/DataStoreService.h"
@@ -136,6 +137,7 @@ using namespace mozilla::system;
 #include "mozilla/dom/HTMLVideoElement.h"
 #include "CameraPreferences.h"
 #include "TouchManager.h"
+#include "MediaDecoder.h"
 
 using namespace mozilla;
 using namespace mozilla::net;
@@ -310,7 +312,10 @@ nsLayoutStatics::Initialize()
 
 #ifdef DEBUG
   nsStyleContext::Initialize();
+  mozilla::css::CommonAnimationManager::Initialize();
 #endif
+
+  MediaDecoder::InitStatics();
 
   return NS_OK;
 }

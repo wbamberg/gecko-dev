@@ -5,20 +5,6 @@
 
 package org.mozilla.gecko;
 
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.lang.reflect.Method;
-import java.net.URLEncoder;
-import java.util.EnumSet;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Vector;
-
-import org.json.JSONException;
-import org.json.JSONObject;
 import org.mozilla.gecko.AppConstants.Versions;
 import org.mozilla.gecko.DynamicToolbar.PinReason;
 import org.mozilla.gecko.DynamicToolbar.VisibilityTransition;
@@ -35,6 +21,7 @@ import org.mozilla.gecko.favicons.Favicons;
 import org.mozilla.gecko.favicons.LoadFaviconTask;
 import org.mozilla.gecko.favicons.OnFaviconLoadedListener;
 import org.mozilla.gecko.favicons.decoders.IconDirectoryEntry;
+import org.mozilla.gecko.firstrun.FirstrunPane;
 import org.mozilla.gecko.fxa.FirefoxAccounts;
 import org.mozilla.gecko.fxa.activities.FxAccountGetStartedActivity;
 import org.mozilla.gecko.gfx.BitmapUtils;
@@ -57,18 +44,19 @@ import org.mozilla.gecko.menu.GeckoMenuItem;
 import org.mozilla.gecko.mozglue.ContextUtils;
 import org.mozilla.gecko.mozglue.ContextUtils.SafeIntent;
 import org.mozilla.gecko.mozglue.RobocopTarget;
-import org.mozilla.gecko.firstrun.FirstrunPane;
 import org.mozilla.gecko.overlays.ui.ShareDialog;
 import org.mozilla.gecko.preferences.ClearOnShutdownPref;
 import org.mozilla.gecko.preferences.GeckoPreferences;
 import org.mozilla.gecko.prompts.Prompt;
 import org.mozilla.gecko.prompts.PromptListItem;
 import org.mozilla.gecko.sync.setup.SyncAccounts;
+import org.mozilla.gecko.tabqueue.TabQueueHelper;
+import org.mozilla.gecko.tabqueue.TabQueuePrompt;
 import org.mozilla.gecko.tabs.TabHistoryController;
+import org.mozilla.gecko.tabs.TabHistoryController.OnShowTabHistory;
 import org.mozilla.gecko.tabs.TabHistoryFragment;
 import org.mozilla.gecko.tabs.TabHistoryPage;
 import org.mozilla.gecko.tabs.TabsPanel;
-import org.mozilla.gecko.tabs.TabHistoryController.OnShowTabHistory;
 import org.mozilla.gecko.toolbar.AutocompleteHandler;
 import org.mozilla.gecko.toolbar.BrowserToolbar;
 import org.mozilla.gecko.toolbar.BrowserToolbar.TabEditingState;
@@ -139,6 +127,20 @@ import android.widget.ListView;
 import android.widget.RelativeLayout;
 import android.widget.Toast;
 import android.widget.ViewFlipper;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.lang.reflect.Method;
+import java.net.URLEncoder;
+import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Vector;
 
 public class BrowserApp extends GeckoApp
                         implements TabsPanel.TabsLayoutChangeListener,
@@ -166,6 +168,7 @@ public class BrowserApp extends GeckoApp
 
     // Request ID for startActivityForResult.
     private static final int ACTIVITY_REQUEST_PREFERENCES = 1001;
+    private static final int ACTIVITY_REQUEST_TAB_QUEUE = 2001;
 
     @RobocopTarget
     public static final String EXTRA_SKIP_STARTPANE = "skipstartpane";
@@ -713,6 +716,8 @@ public class BrowserApp extends GeckoApp
             // Show the target URL immediately in the toolbar.
             mBrowserToolbar.setTitle(intent.getDataString());
 
+            showTabQueuePromptIfApplicable(intent);
+
             Telemetry.sendUIEvent(TelemetryContract.Event.LOAD_URL, TelemetryContract.Method.INTENT);
         } else if (GuestSession.NOTIFICATION_INTENT.equals(action)) {
             GuestSession.handleIntent(this, intent);
@@ -905,6 +910,19 @@ public class BrowserApp extends GeckoApp
         checkFirstrun(this, new SafeIntent(getIntent()));
     }
 
+    private void processTabQueue() {
+        if (AppConstants.NIGHTLY_BUILD && AppConstants.MOZ_ANDROID_TAB_QUEUE) {
+            ThreadUtils.postToBackgroundThread(new Runnable() {
+                @Override
+                public void run() {
+                    if (TabQueueHelper.shouldOpenTabQueueUrls(BrowserApp.this)) {
+                        TabQueueHelper.openQueuedUrls(BrowserApp.this, mProfile, TabQueueHelper.FILE_NAME, false);
+                    }
+                }
+            });
+        }
+    }
+
     @Override
     public void onResume() {
         super.onResume();
@@ -923,6 +941,8 @@ public class BrowserApp extends GeckoApp
 
         EventDispatcher.getInstance().unregisterGeckoThreadListener((GeckoEventListener)this,
             "Prompt:ShowTop");
+
+        processTabQueue();
     }
 
     @Override
@@ -2411,6 +2431,11 @@ public class BrowserApp extends GeckoApp
                     }
                 });
                 break;
+
+            case ACTIVITY_REQUEST_TAB_QUEUE:
+                TabQueueHelper.processTabQueuePromptResponse(resultCode, this);
+                break;
+
             default:
                 super.onActivityResult(requestCode, resultCode, data);
         }
@@ -2691,13 +2716,13 @@ public class BrowserApp extends GeckoApp
         } else if (info.parent == GECKO_TOOLS_MENU) {
             // The tools menu only exists in our -v11 resources.
             if (Versions.feature11Plus) {
-                MenuItem tools = menu.findItem(R.id.tools);
+                final MenuItem tools = menu.findItem(R.id.tools);
                 destination = tools != null ? tools.getSubMenu() : menu;
             } else {
                 destination = menu;
             }
         } else {
-            MenuItem parent = menu.findItem(info.parent);
+            final MenuItem parent = menu.findItem(info.parent);
             if (parent == null) {
                 return;
             }
@@ -2715,7 +2740,7 @@ public class BrowserApp extends GeckoApp
             }
         }
 
-        MenuItem item = destination.add(Menu.NONE, info.id, Menu.NONE, info.label);
+        final MenuItem item = destination.add(Menu.NONE, info.id, Menu.NONE, info.label);
 
         item.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
             @Override
@@ -2733,7 +2758,7 @@ public class BrowserApp extends GeckoApp
                 @Override
                 public void onBitmapFound(Drawable d) {
                     // TODO: why do we re-find the item?
-                    MenuItem item = destination.findItem(id);
+                    final MenuItem item = destination.findItem(id);
                     if (item == null) {
                         return;
                     }
@@ -2784,7 +2809,7 @@ public class BrowserApp extends GeckoApp
         if (mMenu == null)
             return;
 
-        MenuItem menuItem = mMenu.findItem(id);
+        final MenuItem menuItem = mMenu.findItem(id);
         if (menuItem != null)
             mMenu.removeItem(id);
     }
@@ -2809,7 +2834,7 @@ public class BrowserApp extends GeckoApp
             return;
         }
 
-        MenuItem menuItem = mMenu.findItem(id);
+        final MenuItem menuItem = mMenu.findItem(id);
         if (menuItem != null) {
             menuItem.setTitle(options.optString("name", menuItem.getTitle().toString()));
             menuItem.setCheckable(options.optBoolean("checkable", menuItem.isCheckable()));
@@ -2875,6 +2900,11 @@ public class BrowserApp extends GeckoApp
         if (mMenuPanel != null)
             mMenuPanel.scrollTo(0, 0);
 
+        // Scroll menu ListView (potentially in MenuPanel ViewGroup) to top.
+        if (mMenu instanceof GeckoMenu) {
+            ((GeckoMenu) mMenu).setSelection(0);
+        }
+
         if (!mBrowserToolbar.openOptionsMenu())
             super.openOptionsMenu();
 
@@ -2931,18 +2961,18 @@ public class BrowserApp extends GeckoApp
         }
 
         Tab tab = Tabs.getInstance().getSelectedTab();
-        MenuItem bookmark = aMenu.findItem(R.id.bookmark);
+        final MenuItem bookmark = aMenu.findItem(R.id.bookmark);
         final MenuItem reader = aMenu.findItem(R.id.reading_list);
-        MenuItem back = aMenu.findItem(R.id.back);
-        MenuItem forward = aMenu.findItem(R.id.forward);
-        MenuItem share = aMenu.findItem(R.id.share);
+        final MenuItem back = aMenu.findItem(R.id.back);
+        final MenuItem forward = aMenu.findItem(R.id.forward);
+        final MenuItem share = aMenu.findItem(R.id.share);
         final MenuItem quickShare = aMenu.findItem(R.id.quickshare);
-        MenuItem saveAsPDF = aMenu.findItem(R.id.save_as_pdf);
-        MenuItem charEncoding = aMenu.findItem(R.id.char_encoding);
-        MenuItem findInPage = aMenu.findItem(R.id.find_in_page);
-        MenuItem desktopMode = aMenu.findItem(R.id.desktop_mode);
-        MenuItem enterGuestMode = aMenu.findItem(R.id.new_guest_session);
-        MenuItem exitGuestMode = aMenu.findItem(R.id.exit_guest_session);
+        final MenuItem saveAsPDF = aMenu.findItem(R.id.save_as_pdf);
+        final MenuItem charEncoding = aMenu.findItem(R.id.char_encoding);
+        final MenuItem findInPage = aMenu.findItem(R.id.find_in_page);
+        final MenuItem desktopMode = aMenu.findItem(R.id.desktop_mode);
+        final MenuItem enterGuestMode = aMenu.findItem(R.id.new_guest_session);
+        final MenuItem exitGuestMode = aMenu.findItem(R.id.exit_guest_session);
 
         // Only show the "Quit" menu item on pre-ICS, television devices,
         // or if the user has explicitly enabled the clear on shutdown pref.
@@ -3380,6 +3410,7 @@ public class BrowserApp extends GeckoApp
 
         final boolean isViewAction = Intent.ACTION_VIEW.equals(action);
         final boolean isBookmarkAction = GeckoApp.ACTION_HOMESCREEN_SHORTCUT.equals(action);
+        final boolean isTabQueueAction = TabQueueHelper.LOAD_URLS_ACTION.equals(action);
 
         if (mInitialized && (isViewAction || isBookmarkAction)) {
             // Dismiss editing mode if the user is loading a URL from an external app.
@@ -3396,6 +3427,8 @@ public class BrowserApp extends GeckoApp
             Telemetry.sendUIEvent(TelemetryContract.Event.LOAD_URL, method);
         }
 
+        showTabQueuePromptIfApplicable(intent);
+
         super.onNewIntent(intent);
 
         if (AppConstants.MOZ_ANDROID_BEAM && NfcAdapter.ACTION_NDEF_DISCOVERED.equals(action)) {
@@ -3406,6 +3439,17 @@ public class BrowserApp extends GeckoApp
         // Only solicit feedback when the app has been launched from the icon shortcut.
         if (GuestSession.NOTIFICATION_INTENT.equals(action)) {
             GuestSession.handleIntent(this, intent);
+        }
+
+        // If the user has clicked the tab queue notification then load the tabs.
+        if(AppConstants.NIGHTLY_BUILD  && AppConstants.MOZ_ANDROID_TAB_QUEUE && mInitialized && isTabQueueAction) {
+            int queuedTabCount = TabQueueHelper.getTabQueueLength(this);
+            TabQueueHelper.openQueuedUrls(this, mProfile, TabQueueHelper.FILE_NAME, false);
+
+            // If there's more than one tab then also show the tabs panel.
+            if (queuedTabCount > 1) {
+                showNormalTabs();
+            }
         }
 
         if (!mInitialized || !Intent.ACTION_MAIN.equals(action)) {
@@ -3433,6 +3477,22 @@ public class BrowserApp extends GeckoApp
         } finally {
             StrictMode.setThreadPolicy(savedPolicy);
         }
+    }
+
+    private void showTabQueuePromptIfApplicable(final Intent intent) {
+        ThreadUtils.postToBackgroundThread(new Runnable() {
+            @Override
+            public void run() {
+                // We only want to show the prompt if the browser has been opened from an external url
+                if (AppConstants.NIGHTLY_BUILD && AppConstants.MOZ_ANDROID_TAB_QUEUE
+                                               && mInitialized
+                                               && Intent.ACTION_VIEW.equals(intent.getAction())
+                                               && TabQueueHelper.shouldShowTabQueuePrompt(BrowserApp.this)) {
+                    Intent promptIntent = new Intent(BrowserApp.this, TabQueuePrompt.class);
+                    startActivityForResult(promptIntent, ACTIVITY_REQUEST_TAB_QUEUE);
+                }
+            }
+        });
     }
 
     @Override

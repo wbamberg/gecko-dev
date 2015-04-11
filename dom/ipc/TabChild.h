@@ -226,19 +226,19 @@ protected:
 };
 
 class TabChild final : public TabChildBase,
-                           public PBrowserChild,
-                           public nsIWebBrowserChrome2,
-                           public nsIEmbeddingSiteWindow,
-                           public nsIWebBrowserChromeFocus,
-                           public nsIInterfaceRequestor,
-                           public nsIWindowProvider,
-                           public nsIDOMEventListener,
-                           public nsIWebProgressListener,
-                           public nsSupportsWeakReference,
-                           public nsITabChild,
-                           public nsIObserver,
-                           public TabContext,
-                           public nsITooltipListener
+                       public PBrowserChild,
+                       public nsIWebBrowserChrome2,
+                       public nsIEmbeddingSiteWindow,
+                       public nsIWebBrowserChromeFocus,
+                       public nsIInterfaceRequestor,
+                       public nsIWindowProvider,
+                       public nsIDOMEventListener,
+                       public nsIWebProgressListener,
+                       public nsSupportsWeakReference,
+                       public nsITabChild,
+                       public nsIObserver,
+                       public TabContext,
+                       public nsITooltipListener
 {
     typedef mozilla::dom::ClonedMessageData ClonedMessageData;
     typedef mozilla::layout::RenderFrameChild RenderFrameChild;
@@ -267,7 +267,8 @@ public:
     Create(nsIContentChild* aManager, const TabId& aTabId, const TabContext& aContext, uint32_t aChromeFlags);
 
     bool IsRootContentDocument();
-
+    // Let managees query if it is safe to send messages.
+    bool IsDestroyed() { return mDestroyed; }
     const TabId GetTabId() const {
       MOZ_ASSERT(mUniqueId != 0);
       return mUniqueId;
@@ -349,6 +350,9 @@ public:
                                 const bool&     aIgnoreRootScrollFrame) override;
     virtual bool RecvRealMouseMoveEvent(const mozilla::WidgetMouseEvent& event) override;
     virtual bool RecvRealMouseButtonEvent(const mozilla::WidgetMouseEvent& event) override;
+    virtual bool RecvRealDragEvent(const WidgetDragEvent& aEvent,
+                                   const uint32_t& aDragAction,
+                                   const uint32_t& aDropEffect) override;
     virtual bool RecvRealKeyEvent(const mozilla::WidgetKeyboardEvent& event,
                                   const MaybeNativeKeyBinding& aBindings) override;
     virtual bool RecvMouseWheelEvent(const mozilla::WidgetWheelEvent& event,

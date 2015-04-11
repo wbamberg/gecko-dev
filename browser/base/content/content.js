@@ -164,6 +164,29 @@ let handleContentContextMenu = function (event) {
   let baseURI = doc.baseURI;
   let referrer = doc.referrer;
   let referrerPolicy = doc.referrerPolicy;
+  let frameOuterWindowID = doc.defaultView.QueryInterface(Ci.nsIInterfaceRequestor)
+                                          .getInterface(Ci.nsIDOMWindowUtils)
+                                          .outerWindowID;
+
+  // Media related cache info parent needs for saving
+  let contentType = null;
+  let contentDisposition = null;
+  if (event.target.nodeType == Ci.nsIDOMNode.ELEMENT_NODE &&
+      event.target instanceof Ci.nsIImageLoadingContent &&
+      event.target.currentURI) {
+    try {
+      let imageCache = Cc["@mozilla.org/image/tools;1"].getService(Ci.imgITools)
+                                                       .getImgCacheForDocument(doc);
+      let props =
+        imageCache.findEntryProperties(event.target.currentURI);
+      if (props) {
+        contentType = props.get("type", Ci.nsISupportsCString).data;
+        contentDisposition = props.get("content-disposition", Ci.nsISupportsCString).data;
+      }
+    } catch (e) {
+      Cu.reportError(e);
+    }
+  }
 
   if (Services.appinfo.processType == Services.appinfo.PROCESS_TYPE_CONTENT) {
     let editFlags = SpellCheckHelper.isEditable(event.target, content);
@@ -179,7 +202,8 @@ let handleContentContextMenu = function (event) {
     sendSyncMessage("contextmenu",
                     { editFlags, spellInfo, customMenuItems, addonInfo,
                       principal, docLocation, charSet, baseURI, referrer,
-                      referrerPolicy },
+                      referrerPolicy, contentType, contentDisposition,
+                      frameOuterWindowID },
                     { event, popupNode: event.target });
   }
   else {
@@ -197,6 +221,8 @@ let handleContentContextMenu = function (event) {
       charSet: charSet,
       referrer: referrer,
       referrerPolicy: referrerPolicy,
+      contentType: contentType,
+      contentDisposition: contentDisposition,
     };
   }
 }
@@ -546,11 +572,16 @@ let AboutReaderListener = {
     }
   },
   updateReaderButton: function() {
-    if (!ReaderMode.isEnabledForParseOnLoad || this.isAboutReader) {
+    if (!ReaderMode.isEnabledForParseOnLoad || this.isAboutReader ||
+        !(content.document instanceof content.HTMLDocument) ||
+        content.document.mozSyntheticDocument) {
       return;
     }
-    let isArticle = ReaderMode.isProbablyReaderable(content.document);
-    sendAsyncMessage("Reader:UpdateReaderButton", { isArticle: isArticle });
+    // Only send updates when there are articles; there's no point updating with
+    // |false| all the time.
+    if (ReaderMode.isProbablyReaderable(content.document)) {
+      sendAsyncMessage("Reader:UpdateReaderButton", { isArticle: true });
+    }
   },
 };
 AboutReaderListener.init();

@@ -591,15 +591,37 @@ TabSources.prototype = {
   },
 
   getAllGeneratedLocations: function (originalLocation) {
-    return this.getGeneratedLocation(originalLocation)
-               .then((generatedLocation) => {
-      if (generatedLocation.generatedLine === null &&
-          generatedLocation.generatedColumn === null) {
-        return [];
+    let {
+      originalSourceActor,
+      originalLine,
+      originalColumn
+    } = originalLocation;
+
+    let source = originalSourceActor.source ||
+                 originalSourceActor.generatedSource;
+
+    return this.fetchSourceMap(source).then((map) => {
+      if (map) {
+        map.computeColumnSpans();
+
+        return map.allGeneratedPositionsFor({
+          source: originalSourceActor.url,
+          line: originalLine,
+          column: originalColumn
+        }).map(({ line, column, lastColumn }) => {
+          return new GeneratedLocation(
+            this.createNonSourceMappedActor(source),
+            line,
+            column,
+            lastColumn
+          );
+        });
       }
-      return [generatedLocation];
+
+      return [GeneratedLocation.fromOriginalLocation(originalLocation)];
     });
   },
+
 
   /**
    * Returns a promise of the location in the generated source corresponding to

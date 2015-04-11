@@ -1733,7 +1733,7 @@ this.PushService = {
 
     this._udpServer = Cc["@mozilla.org/network/udp-socket;1"]
                         .createInstance(Ci.nsIUDPSocket);
-    this._udpServer.init(-1, false);
+    this._udpServer.init(-1, false, Services.scriptSecurityManager.getSystemPrincipal());
     this._udpServer.asyncListen(this);
     debug("listenForUDPWakeup listening on " + this._udpServer.port);
 
@@ -1775,14 +1775,15 @@ this.PushService = {
 
       let nm = Cc["@mozilla.org/network/manager;1"].getService(Ci.nsINetworkManager);
       if (nm.active && nm.active.type == Ci.nsINetworkInterface.NETWORK_TYPE_MOBILE) {
-        let icc = Cc["@mozilla.org/ril/content-helper;1"].getService(Ci.nsIIccProvider);
+        let iccService = Cc["@mozilla.org/icc/iccservice;1"].getService(Ci.nsIIccService);
         // TODO: Bug 927721 - PushService for multi-sim
-        // In Multi-sim, there is more than one client in iccProvider. Each
-        // client represents a icc service. To maintain backward compatibility
+        // In Multi-sim, there is more than one client in iccService. Each
+        // client represents a icc handle. To maintain backward compatibility
         // with single sim, we always use client 0 for now. Adding support
         // for multiple sim will be addressed in bug 927721, if needed.
         let clientId = 0;
-        let iccInfo = icc.getIccInfo(clientId);
+        let icc = iccService.getIccByServiceId(clientId);
+        let iccInfo = icc && icc.iccInfo;
         if (iccInfo) {
           debug("Running on mobile data");
 
