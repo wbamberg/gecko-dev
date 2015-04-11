@@ -190,6 +190,7 @@ MdnDocsWidget.prototype = {
      * MDN docs content to be retrieved.
      */
     function initializeDocument(propertyName) {
+
       // set property name heading
       elements.heading.textContent = propertyName;
 
@@ -199,6 +200,10 @@ MdnDocsWidget.prototype = {
       // clear docs summary and syntax
       elements.summary.textContent = "";
       elements.syntax.textContent = "";
+
+      // reset the scroll position
+      elements.info.scrollTop = 0;
+      elements.info.scrollLeft = 0;
 
       // show the throbber
       elements.info.classList.add("devtools-throbber");

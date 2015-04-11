@@ -41,7 +41,7 @@ const ERROR_MESSAGE = "Could not load docs page.";
  * different ways that the docs pages might be constructed, including errors
  * like pages that don't include docs where we expect.
  */
-const SYNTAX_BY_ID = "html-mdn-css-syntax-id.html";
+const SYNTAX_OLD_STYLE = "html-mdn-css-syntax-old-style.html";
 const NO_SUMMARY = "html-mdn-css-no-summary.html";
 const NO_SYNTAX = "html-mdn-css-no-syntax.html";
 const NO_SUMMARY_OR_SYNTAX = "html-mdn-css-no-summary-or-syntax.html";
@@ -55,10 +55,10 @@ const TEST_DATA = [{
     syntax: ""
   }
 }, {
-  desc: "Test a property whose syntax section is specified using an ID",
-  docsPageUrl: SYNTAX_BY_ID,
+  desc: "Test a property whose syntax section is specified using an old-style page",
+  docsPageUrl: SYNTAX_OLD_STYLE,
   expectedContents: {
-    propertyName: SYNTAX_BY_ID,
+    propertyName: SYNTAX_OLD_STYLE,
     summary: BASIC_EXPECTED_SUMMARY,
     syntax: BASIC_EXPECTED_SYNTAX
   }

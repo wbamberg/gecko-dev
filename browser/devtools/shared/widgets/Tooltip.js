@@ -894,7 +894,7 @@ Tooltip.prototype = {
    * UI with new content each time the tooltip is shown.
    */
   setMdnDocsContent: function() {
-    let dimensions = {width: "400", height: "300"};
+    let dimensions = {width: "410", height: "300"};
     return this.setIFrameContent(dimensions, MDN_DOCS_FRAME).then(onLoaded);
 
     function onLoaded(win) {
