@@ -11,9 +11,12 @@
  * MdnDocsWidget then fetches docs for that property by making an XHR to
  * a docs page, and loads the results into the document.
  * 
- * In this test we pass a nonexistent property. The tooltip code will then
- * make a request to a nonexistent URL, get a 404 back, and should
- * put an error message in the tooltip.
+ * In this file we test that the tooltip can properly handle the different
+ * structures that the docs page might have, including variant structures and
+ * error conditions like parts of the document being missing.
+ * 
+ * We also test that the tooltip properly handles the case where the page
+ * doesn't exist at all.
  */
 
 "use strict";

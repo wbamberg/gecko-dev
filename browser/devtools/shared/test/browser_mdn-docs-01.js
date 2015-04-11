@@ -15,7 +15,7 @@
  *
  * In this file we test:
  * - the initial state of the document before the docs have loaded
- * - the state of the document after the docs have loaded, in the normal case
+ * - the state of the document after the docs have loaded
  */
 
 "use strict";
