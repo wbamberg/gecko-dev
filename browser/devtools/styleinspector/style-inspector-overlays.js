@@ -18,6 +18,7 @@ const {
   SwatchColorPickerTooltip,
   SwatchCubicBezierTooltip,
   CssDocsTooltip
+  SwatchFilterTooltip
 } = require("devtools/shared/widgets/Tooltip");
 const {CssLogic} = require("devtools/styleinspector/css-logic");
 const {Promise:promise} = Cu.import("resource://gre/modules/Promise.jsm", {});
@@ -240,7 +241,8 @@ TooltipsOverlay.prototype = {
   get isEditing() {
     return this.colorPicker.tooltip.isShown() ||
            this.colorPicker.eyedropperOpen ||
-           this.cubicBezier.tooltip.isShown();
+           this.cubicBezier.tooltip.isShown() ||
+           this.filterEditor.tooltip.isShown();
   },
 
   /**
@@ -264,6 +266,8 @@ TooltipsOverlay.prototype = {
       this.cubicBezier = new SwatchCubicBezierTooltip(this.view.inspector.panelDoc);
       // MDN CSS help tooltip
       this.cssDocs = new CssDocsTooltip(this.view.inspector.panelDoc);
+      // Filter editor tooltip
+      this.filterEditor = new SwatchFilterTooltip(this.view.inspector.panelDoc);
     }
 
     this._isStarted = true;
@@ -291,6 +295,10 @@ TooltipsOverlay.prototype = {
 
     if (this.cssDocs) {
       this.cssDocs.destroy();
+    }
+
+    if (this.filterEditor) {
+      this.filterEditor.destroy();
     }
 
     this._isStarted = false;
@@ -356,6 +364,11 @@ TooltipsOverlay.prototype = {
       this.cssDocs.hide();
     }
 
+    if (this.isRuleView && this.filterEditor.tooltip.isShown()) {
+      this.filterEditor.revert();
+      this.filterEdtior.hide();
+    }
+
     let inspector = this.view.inspector;
 
     if (type === TOOLTIP_IMAGE_TYPE) {
@@ -387,6 +400,10 @@ TooltipsOverlay.prototype = {
 
     if (this.cssDocs) {
       this.cssDocs.hide();
+    }
+
+    if (this.filterEditor) {
+      this.filterEditor.hide();
     }
   },
 
