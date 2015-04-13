@@ -31,7 +31,7 @@ Cu.import("resource://gre/modules/Promise.jsm");
 // for "?raw&macros&" see https://developer.mozilla.org/en-US/docs/MDN/Kuma/API#Document_parameters
 // the other parameters are so we know which MDN requests come from this feature
 const URL_POSTFIX = "?raw&macros&utm_source=mozilla&utm_medium=firefox-inspector&utm_campaign=default";
-var BASE_MDN_CSS_PAGE = "https://developer.mozilla.org/docs/Web/CSS/";
+var BASE_MDN_CSS_PAGE = "https://developer.mozilla.org/en-US/docs/Web/CSS/";
 const BROWSER_WINDOW = 'navigator:browser';
 
 /**
