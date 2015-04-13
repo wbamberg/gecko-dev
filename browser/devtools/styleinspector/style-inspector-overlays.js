@@ -17,7 +17,7 @@ const {
   Tooltip,
   SwatchColorPickerTooltip,
   SwatchCubicBezierTooltip,
-  CssDocsTooltip
+  CssDocsTooltip,
   SwatchFilterTooltip
 } = require("devtools/shared/widgets/Tooltip");
 const {CssLogic} = require("devtools/styleinspector/css-logic");
