@@ -10,11 +10,11 @@
  * structure. You then call loadCssDocs(), passing in a CSS property name.
  * MdnDocsWidget then fetches docs for that property by making an XHR to
  * a docs page, and loads the results into the document.
- * 
+ *
  * In this file we test that the tooltip can properly handle the different
  * structures that the docs page might have, including variant structures and
  * error conditions like parts of the document being missing.
- * 
+ *
  * We also test that the tooltip properly handles the case where the page
  * doesn't exist at all.
  */
