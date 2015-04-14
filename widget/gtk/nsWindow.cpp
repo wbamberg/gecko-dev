@@ -1697,14 +1697,6 @@ nsWindow::Invalidate(const nsIntRect &aRect)
     return NS_OK;
 }
 
-void
-nsWindow::Update()
-{
-    if (!ShouldUseOffMainThreadCompositing() && mGdkWindow) {
-        gdk_window_process_updates(mGdkWindow, true);
-    }
-}
-
 void*
 nsWindow::GetNativeData(uint32_t aDataType)
 {
@@ -6563,8 +6555,11 @@ nsWindow::GdkRectToDevicePixels(GdkRectangle rect) {
 nsresult
 nsWindow::SynthesizeNativeMouseEvent(LayoutDeviceIntPoint aPoint,
                                      uint32_t aNativeMessage,
-                                     uint32_t aModifierFlags)
+                                     uint32_t aModifierFlags,
+                                     nsIObserver* aObserver)
 {
+  AutoObserverNotifier notifier(aObserver, "mouseevent");
+
   if (!mGdkWindow) {
     return NS_OK;
   }

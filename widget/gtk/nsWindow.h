@@ -133,7 +133,6 @@ public:
     NS_IMETHOD         SetCursor(imgIContainer* aCursor,
                                  uint32_t aHotspotX, uint32_t aHotspotY) override;
     NS_IMETHOD         Invalidate(const nsIntRect &aRect) override;
-    virtual void       Update() override;
     virtual void*      GetNativeData(uint32_t aDataType) override;
     void               SetNativeData(uint32_t aDataType, uintptr_t aVal) override;
     NS_IMETHOD         SetTitle(const nsAString& aTitle) override;
@@ -301,10 +300,12 @@ public:
 
     virtual nsresult SynthesizeNativeMouseEvent(mozilla::LayoutDeviceIntPoint aPoint,
                                                 uint32_t aNativeMessage,
-                                                uint32_t aModifierFlags) override;
+                                                uint32_t aModifierFlags,
+                                                nsIObserver* aObserver) override;
 
-    virtual nsresult SynthesizeNativeMouseMove(mozilla::LayoutDeviceIntPoint aPoint) override
-    { return SynthesizeNativeMouseEvent(aPoint, GDK_MOTION_NOTIFY, 0); }
+    virtual nsresult SynthesizeNativeMouseMove(mozilla::LayoutDeviceIntPoint aPoint,
+                                               nsIObserver* aObserver) override
+    { return SynthesizeNativeMouseEvent(aPoint, GDK_MOTION_NOTIFY, 0, aObserver); }
 
 protected:
     virtual ~nsWindow();

@@ -583,8 +583,10 @@ MetroWidget::SynthesizeNativeKeyEvent(int32_t aNativeKeyboardLayout,
                                       int32_t aNativeKeyCode,
                                       uint32_t aModifierFlags,
                                       const nsAString& aCharacters,
-                                      const nsAString& aUnmodifiedCharacters)
+                                      const nsAString& aUnmodifiedCharacters,
+                                      nsIObserver* aObserver)
 {
+  AutoObserverNotifier notifier(aObserver, "keyevent");
   KeyboardLayout* keyboardLayout = KeyboardLayout::GetInstance();
   return keyboardLayout->SynthesizeNativeKeyEvent(
            this, aNativeKeyboardLayout, aNativeKeyCode, aModifierFlags,
@@ -594,10 +596,12 @@ MetroWidget::SynthesizeNativeKeyEvent(int32_t aNativeKeyboardLayout,
 nsresult
 MetroWidget::SynthesizeNativeMouseEvent(LayoutDeviceIntPoint aPoint,
                                         uint32_t aNativeMessage,
-                                        uint32_t aModifierFlags)
+                                        uint32_t aModifierFlags,
+                                        nsIObserver* aObserver)
 {
   WinUtils::Log("ENTERED SynthesizeNativeMouseEvent");
 
+  AutoObserverNotifier notifier(aObserver, "mouseevent");
   INPUT inputs[2];
   memset(inputs, 0, 2*sizeof(INPUT));
   inputs[0].type = inputs[1].type = INPUT_MOUSE;
@@ -622,8 +626,10 @@ MetroWidget::SynthesizeNativeMouseScrollEvent(LayoutDeviceIntPoint aPoint,
                                               double aDeltaY,
                                               double aDeltaZ,
                                               uint32_t aModifierFlags,
-                                              uint32_t aAdditionalFlags)
+                                              uint32_t aAdditionalFlags
+                                              nsIObserver* aObserver)
 {
+  AutoObserverNotifier notifier(aObserver, "mousescrollevent");
   return MouseScrollHandler::SynthesizeNativeMouseScrollEvent(
            this, aPoint, aNativeMessage,
            (aNativeMessage == WM_MOUSEWHEEL || aNativeMessage == WM_VSCROLL) ?
@@ -1180,14 +1186,6 @@ MetroWidget::Invalidate(bool aEraseBackground,
   }
   Invalidate(rect);
   return NS_OK;
-}
-
-void
-MetroWidget::Update()
-{
-  if (!ShouldUseOffMainThreadCompositing() && mWnd) {
-    ::UpdateWindow(mWnd);
-  }
 }
 
 NS_IMETHODIMP

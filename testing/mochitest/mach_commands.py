@@ -243,6 +243,7 @@ class MochitestRunner(MozbuildObject):
             start_at=None,
             end_at=None,
             e10s=False,
+            enable_cpow_warnings=False,
             strict_content_sandbox=False,
             nested_oop=False,
             dmd=False,
@@ -337,7 +338,6 @@ class MochitestRunner(MozbuildObject):
             flavor = 'browser-chrome'
         elif suite == 'devtools':
             options.browserChrome = True
-            options.subsuite = 'devtools'
         elif suite == 'jetpack-package':
             options.jetpackPackage = True
         elif suite == 'jetpack-addon':
@@ -383,6 +383,7 @@ class MochitestRunner(MozbuildObject):
         options.startAt = start_at
         options.endAt = end_at
         options.e10s = e10s
+        options.enableCPOWWarnings = enable_cpow_warnings
         options.strictContentSandbox = strict_content_sandbox
         options.nested_oop = nested_oop
         options.dumpAboutMemoryAfterTest = dump_about_memory_after_test
@@ -408,6 +409,9 @@ class MochitestRunner(MozbuildObject):
 
         for k, v in kwargs.iteritems():
             setattr(options, k, v)
+
+        if suite == 'devtools':
+            options.subsuite = 'devtools'
 
         if test_paths:
             resolver = self._spawn(TestResolver)
@@ -622,6 +626,11 @@ def add_mochitest_general_args(parser):
         '--e10s',
         action='store_true',
         help='Run tests with electrolysis preferences and test filtering enabled.')
+
+    parser.add_argument(
+        '--enable-cpow-warnings',
+        action='store_true',
+        help='Run tests with unsafe CPOW usage warnings enabled.')
 
     parser.add_argument(
         '--strict-content-sandbox',

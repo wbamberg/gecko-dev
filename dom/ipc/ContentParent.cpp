@@ -46,6 +46,7 @@
 #include "mozilla/dom/FileSystemRequestParent.h"
 #include "mozilla/dom/GeolocationBinding.h"
 #include "mozilla/dom/PContentBridgeParent.h"
+#include "mozilla/dom/PContentPermissionRequestParent.h"
 #include "mozilla/dom/PCycleCollectWithLogsParent.h"
 #include "mozilla/dom/PFMRadioParent.h"
 #include "mozilla/dom/PMemoryReportRequestParent.h"
@@ -100,6 +101,7 @@
 #include "nsIAlertsService.h"
 #include "nsIAppsService.h"
 #include "nsIClipboard.h"
+#include "nsContentPermissionHelper.h"
 #include "nsICycleCollectorListener.h"
 #include "nsIDocument.h"
 #include "nsIDOMGeoGeolocation.h"
@@ -589,6 +591,10 @@ static nsTArray<PrefSetting>* sNuwaPrefUpdates;
 // case between StartUp() and ShutDown() or JoinAllSubprocesses().
 static bool sCanLaunchSubprocesses;
 
+// Set to true if the DISABLE_UNSAFE_CPOW_WARNINGS environment variable is
+// set.
+static bool sDisableUnsafeCPOWWarnings = false;
+
 // The first content child has ID 1, so the chrome process can have ID 0.
 static uint64_t gContentChildID = 1;
 
@@ -747,6 +753,8 @@ ContentParent::StartUp()
     // Test the PBackground infrastructure on ENABLE_TESTS builds when a special
     // testing preference is set.
     MaybeTestPBackground();
+
+    sDisableUnsafeCPOWWarnings = PR_GetEnv("DISABLE_UNSAFE_CPOW_WARNINGS");
 }
 
 /*static*/ void
@@ -1747,16 +1755,18 @@ ContentParent::OnBeginSyncTransaction() {
     if (XRE_GetProcessType() == GeckoProcessType_Default) {
         nsCOMPtr<nsIConsoleService> console(do_GetService(NS_CONSOLESERVICE_CONTRACTID));
         JSContext *cx = nsContentUtils::GetCurrentJSContext();
-        if (console && cx) {
-            nsAutoString filename;
-            uint32_t lineno = 0;
-            nsJSUtils::GetCallingLocation(cx, filename, &lineno);
-            nsCOMPtr<nsIScriptError> error(do_CreateInstance(NS_SCRIPTERROR_CONTRACTID));
-            error->Init(NS_LITERAL_STRING("unsafe CPOW usage"), filename, EmptyString(),
-                        lineno, 0, nsIScriptError::warningFlag, "chrome javascript");
-            console->LogMessage(error);
-        } else {
-            NS_WARNING("Unsafe synchronous IPC message");
+        if (!sDisableUnsafeCPOWWarnings) {
+            if (console && cx) {
+                nsAutoString filename;
+                uint32_t lineno = 0;
+                nsJSUtils::GetCallingLocation(cx, filename, &lineno);
+                nsCOMPtr<nsIScriptError> error(do_CreateInstance(NS_SCRIPTERROR_CONTRACTID));
+                error->Init(NS_LITERAL_STRING("unsafe CPOW usage"), filename, EmptyString(),
+                            lineno, 0, nsIScriptError::warningFlag, "chrome javascript");
+                console->LogMessage(error);
+            } else {
+                NS_WARNING("Unsafe synchronous IPC message");
+            }
         }
     }
 }
@@ -2057,6 +2067,18 @@ ContentParent::NotifyTabDestroyed(PBrowserParent* aTab,
 {
     if (aNotifiedDestroying) {
         --mNumDestroyingTabs;
+    }
+
+    TabId id = static_cast<TabParent*>(aTab)->GetTabId();
+    nsTArray<PContentPermissionRequestParent*> parentArray =
+        nsContentPermissionUtils::GetContentPermissionRequestParentById(id);
+
+    // Need to close undeleted ContentPermissionRequestParents before tab is closed.
+    for (auto& permissionRequestParent : parentArray) {
+        nsTArray<PermissionChoice> emptyChoices;
+        unused << PContentPermissionRequestParent::Send__delete__(permissionRequestParent,
+                                                                  false,
+                                                                  emptyChoices);
     }
 
     // There can be more than one PBrowser for a given app process
@@ -4873,6 +4895,32 @@ ContentParent::RecvUpdateDropEffect(const uint32_t& aDragAction,
     dragSession->UpdateDragEffect();
   }
   return true;
+}
+
+PContentPermissionRequestParent*
+ContentParent::AllocPContentPermissionRequestParent(const InfallibleTArray<PermissionRequest>& aRequests,
+                                                    const IPC::Principal& aPrincipal,
+                                                    const TabId& aTabId)
+{
+    ContentProcessManager* cpm = ContentProcessManager::GetSingleton();
+    nsRefPtr<TabParent> tp = cpm->GetTopLevelTabParentByProcessAndTabId(this->ChildID(),
+                                                                        aTabId);
+    if (!tp) {
+        return nullptr;
+    }
+
+    return nsContentPermissionUtils::CreateContentPermissionRequestParent(aRequests,
+                                                                          tp->GetOwnerElement(),
+                                                                          aPrincipal,
+                                                                          aTabId);
+}
+
+bool
+ContentParent::DeallocPContentPermissionRequestParent(PContentPermissionRequestParent* actor)
+{
+    nsContentPermissionUtils::NotifyRemoveContentPermissionRequestParent(actor);
+    delete actor;
+    return true;
 }
 
 } // namespace dom

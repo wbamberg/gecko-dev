@@ -2826,14 +2826,6 @@ NS_METHOD nsWindow::Invalidate(const nsIntRect & aRect)
   return NS_OK;
 }
 
-void
-nsWindow::Update()
-{
-  if (!ShouldUseOffMainThreadCompositing() && mWnd) {
-    ::UpdateWindow(mWnd);
-  }
-}
-
 NS_IMETHODIMP
 nsWindow::MakeFullScreen(bool aFullScreen, nsIScreen* aTargetScreen)
 {
@@ -4694,7 +4686,9 @@ nsWindow::ProcessMessage(UINT msg, WPARAM& wParam, LPARAM& lParam,
         break;
 
       // let the dwm handle nc painting on glass
-      if(nsUXThemeData::CheckForCompositor())
+      // Never allow native painting if we are on fullscreen
+      if(mSizeMode != nsSizeMode_Fullscreen &&
+         nsUXThemeData::CheckForCompositor())
         break;
 
       if (wParam == TRUE) {
@@ -5794,8 +5788,11 @@ nsWindow::SynthesizeNativeKeyEvent(int32_t aNativeKeyboardLayout,
                                    int32_t aNativeKeyCode,
                                    uint32_t aModifierFlags,
                                    const nsAString& aCharacters,
-                                   const nsAString& aUnmodifiedCharacters)
+                                   const nsAString& aUnmodifiedCharacters,
+                                   nsIObserver* aObserver)
 {
+  AutoObserverNotifier notifier(aObserver, "keyevent");
+
   KeyboardLayout* keyboardLayout = KeyboardLayout::GetInstance();
   return keyboardLayout->SynthesizeNativeKeyEvent(
            this, aNativeKeyboardLayout, aNativeKeyCode, aModifierFlags,
@@ -5805,8 +5802,11 @@ nsWindow::SynthesizeNativeKeyEvent(int32_t aNativeKeyboardLayout,
 nsresult
 nsWindow::SynthesizeNativeMouseEvent(LayoutDeviceIntPoint aPoint,
                                      uint32_t aNativeMessage,
-                                     uint32_t aModifierFlags)
+                                     uint32_t aModifierFlags,
+                                     nsIObserver* aObserver)
 {
+  AutoObserverNotifier notifier(aObserver, "mouseevent");
+
   ::SetCursorPos(aPoint.x, aPoint.y);
 
   INPUT input;
@@ -5826,8 +5826,10 @@ nsWindow::SynthesizeNativeMouseScrollEvent(LayoutDeviceIntPoint aPoint,
                                            double aDeltaY,
                                            double aDeltaZ,
                                            uint32_t aModifierFlags,
-                                           uint32_t aAdditionalFlags)
+                                           uint32_t aAdditionalFlags,
+                                           nsIObserver* aObserver)
 {
+  AutoObserverNotifier notifier(aObserver, "mousescrollevent");
   return MouseScrollHandler::SynthesizeNativeMouseScrollEvent(
            this, aPoint, aNativeMessage,
            (aNativeMessage == WM_MOUSEWHEEL || aNativeMessage == WM_VSCROLL) ?
