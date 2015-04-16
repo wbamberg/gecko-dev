@@ -865,7 +865,7 @@ Tooltip.prototype = {
 
     function onLoaded(iframe) {
       let win = iframe.contentWindow.wrappedJSObject;
-      let doc = win.document;
+      let doc = win.document.documentElement;
       let def = promise.defer();
       let container = win.document.getElementById("container");
       let widget = new CSSFilterEditorWidget(container, filter);
@@ -873,7 +873,7 @@ Tooltip.prototype = {
       iframe.height = doc.offsetHeight;
 
       widget.on("render", e => {
-        iframe.height = doc.offsetHeight
+        iframe.height = doc.offsetHeight;
       });
 
       // Resolve to the widget instance whenever the popup becomes visible
