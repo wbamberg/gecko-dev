@@ -28,10 +28,19 @@ const {Cc, Cu, Ci} = require("chrome");
 Cu.import("resource://gre/modules/Services.jsm");
 Cu.import("resource://gre/modules/Promise.jsm");
 
-// for "?raw&macros&" see https://developer.mozilla.org/en-US/docs/MDN/Kuma/API#Document_parameters
-// the other parameters are so we know which MDN requests come from this feature
-const URL_POSTFIX = "?raw&macros&utm_source=mozilla&utm_medium=firefox-inspector&utm_campaign=default";
-var BASE_MDN_CSS_PAGE = "https://developer.mozilla.org/en-US/docs/Web/CSS/";
+// Parameters for the XHR request
+// see https://developer.mozilla.org/en-US/docs/MDN/Kuma/API#Document_parameters
+const XHR_PARAMS = "?raw&macros";
+// URL for the XHR request
+var XHR_CSS_URL = "https://developer.mozilla.org/en-US/docs/Web/CSS/";
+
+// Parameters for the link to MDN in the tooltip, so
+// so we know which MDN visits come from this feature
+const PAGE_LINK_PARAMS = "?utm_source=mozilla&utm_medium=firefox-inspector&utm_campaign=default"
+// URL for the page link
+// omits locale, so a locale-specific page will be loaded
+var PAGE_LINK_URL = "https://developer.mozilla.org/docs/Web/CSS/";
+
 const BROWSER_WINDOW = 'navigator:browser';
 
 /**
@@ -93,7 +102,7 @@ function getMdnPage(pageUrl) {
 function getCssDocs(cssProperty) {
 
   let deferred = Promise.defer();
-  let pageUrl = makeCssDocsPageUrl(cssProperty) + URL_POSTFIX;
+  let pageUrl = XHR_CSS_URL + cssProperty + XHR_PARAMS;
 
   getMdnPage(pageUrl).then(parseDocsFromResponse, handleRejection);
 
@@ -195,7 +204,8 @@ MdnDocsWidget.prototype = {
       elements.heading.textContent = propertyName;
 
       // set link target
-      elements.linkToMdn.setAttribute("href", makeCssDocsPageUrl(propertyName));
+      elements.linkToMdn.setAttribute("href",
+        PAGE_LINK_URL + propertyName + PAGE_LINK_PARAMS);
 
       // clear docs summary and syntax
       elements.summary.textContent = "";
@@ -396,10 +406,3 @@ function setBaseCssDocsUrl(baseUrl) {
 }
 
 exports.setBaseCssDocsUrl = setBaseCssDocsUrl;
-
-/**
- * Construct the URL to get the CSS docs from.
- */
-function makeCssDocsPageUrl(propertyName) {
-  return BASE_MDN_CSS_PAGE + propertyName;
-}

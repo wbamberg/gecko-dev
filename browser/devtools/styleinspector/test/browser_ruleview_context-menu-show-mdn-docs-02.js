@@ -18,9 +18,7 @@
 "use strict";
 
 const {setBaseCssDocsUrl} = devtools.require("devtools/shared/widgets/MdnDocsWidget");
-Cu.import("resource://gre/modules/Promise.jsm");
 
-const PROPERTYNAME_SELECTOR = ".ruleview-propertyname";
 const PROPERTYNAME = "color";
 
 const TEST_DOC = `
@@ -46,9 +44,10 @@ function* testShowMdnTooltip(view) {
   setBaseCssDocsUrl(TEST_URL_ROOT);
 
   info("Setting the popupNode for the MDN docs tooltip");
-  let root = rootElement(view);
-  let propertyNameSpan = root.querySelector(PROPERTYNAME_SELECTOR);
-  view.doc.popupNode = propertyNameSpan.firstChild;
+
+  let {nameSpan} = getRuleViewProperty(view, "element", PROPERTYNAME);
+
+  view.doc.popupNode = nameSpan.firstChild;
   view._contextMenuUpdate();
 
   let cssDocs = view.tooltips.cssDocs;

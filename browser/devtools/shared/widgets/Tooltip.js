@@ -752,7 +752,7 @@ Tooltip.prototype = {
    *        URL of the document to load into the iframe.
    *
    * @return {promise} A promise which is resolved with
-   * the iframe's content window.
+   * the iframe.
    *
    * This function creates an iframe, loads the specified document
    * into it, sets the tooltip's content to the iframe, and returns
@@ -776,8 +776,7 @@ Tooltip.prototype = {
     // Wait for the load to initialize the widget
     function onLoad() {
       iframe.removeEventListener("load", onLoad, true);
-      let win = iframe.contentWindow.wrappedJSObject;
-      def.resolve(win);
+      def.resolve(iframe);
     }
     iframe.addEventListener("load", onLoad, true);
 
@@ -800,7 +799,8 @@ Tooltip.prototype = {
     let panel = this.panel;
     return this.setIFrameContent(dimensions, SPECTRUM_FRAME).then(onLoaded);
 
-    function onLoaded(win) {
+    function onLoaded(iframe) {
+      let win = iframe.contentWindow.wrappedJSObject;
       let def = promise.defer();
       let container = win.document.getElementById("spectrum");
       let spectrum = new Spectrum(container, color);
@@ -834,7 +834,8 @@ Tooltip.prototype = {
     let panel = this.panel;
     return this.setIFrameContent(dimensions, CUBIC_BEZIER_FRAME).then(onLoaded);
 
-    function onLoaded(win) {
+    function onLoaded(iframe) {
+      let win = iframe.contentWindow.wrappedJSObject;
       let def = promise.defer();
       let container = win.document.getElementById("container");
       let widget = new CubicBezierWidget(container, bezier);
@@ -858,26 +859,18 @@ Tooltip.prototype = {
    * that resolves to the instance of the widget when ready.
    */
   setFilterContent: function(filter) {
-    let def = promise.defer();
-
-    // Create an iframe to host the filter widget
-    let iframe = this.doc.createElementNS(XHTML_NS, "iframe");
-    iframe.setAttribute("transparent", true);
-    iframe.setAttribute("width", "350");
-    iframe.setAttribute("flex", "1");
-    iframe.setAttribute("class", "devtools-tooltip-iframe");
-
+    let dimensions = {width: "350", height: "350"};
     let panel = this.panel;
+    return this.setIFrameContent(dimensions, FILTER_FRAME).then(onLoaded);
 
-    function onLoad() {
-      iframe.removeEventListener("load", onLoad, true);
-      let win = iframe.contentWindow.wrappedJSObject,
-          doc = win.document.documentElement;
-
+    function onLoaded(iframe) {
+      let win = iframe.contentWindow.wrappedJSObject;
+      let doc = win.document;
+      let def = promise.defer();
       let container = win.document.getElementById("container");
       let widget = new CSSFilterEditorWidget(container, filter);
 
-      iframe.height = doc.offsetHeight
+      iframe.height = doc.offsetHeight;
 
       widget.on("render", e => {
         iframe.height = doc.offsetHeight
@@ -892,14 +885,8 @@ Tooltip.prototype = {
           def.resolve(widget);
         }, true);
       }
+      return def.promise;
     }
-    iframe.addEventListener("load", onLoad, true);
-    iframe.setAttribute("src", FILTER_FRAME);
-
-    // Put the iframe in the tooltip
-    this.content = iframe;
-
-    return def.promise;
   },
 
   /**
@@ -950,7 +937,8 @@ Tooltip.prototype = {
     let dimensions = {width: "410", height: "300"};
     return this.setIFrameContent(dimensions, MDN_DOCS_FRAME).then(onLoaded);
 
-    function onLoaded(win) {
+    function onLoaded(iframe) {
+      let win = iframe.contentWindow.wrappedJSObject;
       // create an MdnDocsWidget, initializing it with the content document
       let widget = new MdnDocsWidget(win.document);
       return widget;

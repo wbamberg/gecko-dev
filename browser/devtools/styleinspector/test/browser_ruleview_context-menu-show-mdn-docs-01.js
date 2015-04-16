@@ -17,7 +17,6 @@
 "use strict";
 
 const {setBaseCssDocsUrl} = devtools.require("devtools/shared/widgets/MdnDocsWidget");
-Cu.import("resource://gre/modules/Promise.jsm");
 
 /**
  * The test document tries to confuse the context menu

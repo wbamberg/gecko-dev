@@ -53,7 +53,6 @@ add_task(function*() {
 
   host.destroy();
   gBrowser.removeCurrentTab();
-
 });
 
 /**
@@ -126,34 +125,34 @@ function* testTheBasics(widget) {
   */
 function checkLinkClick(link) {
 
- function loadListener(e) {
-   let tab = e.target;
-   var browser = getBrowser().getBrowserForTab(tab);
-   var uri = browser.currentURI.spec;
-   // this is horrible, and it's because when we open a new tab
-   // "about:blank: is first loaded into it, before the actual
-   // document we want to load.
-   if (uri != "about:blank") {
-     info("New browser tab has loaded");
-     tab.removeEventListener("load", loadListener);
-     gBrowser.removeTab(tab);
-     info("Resolve promise with new tab URI");
-     deferred.resolve(uri);
-   }
- }
+  function loadListener(e) {
+    let tab = e.target;
+    var browser = getBrowser().getBrowserForTab(tab);
+    var uri = browser.currentURI.spec;
+    // this is horrible, and it's because when we open a new tab
+    // "about:blank: is first loaded into it, before the actual
+    // document we want to load.
+    if (uri != "about:blank") {
+      info("New browser tab has loaded");
+      tab.removeEventListener("load", loadListener);
+      gBrowser.removeTab(tab);
+      info("Resolve promise with new tab URI");
+      deferred.resolve(uri);
+    }
+  }
 
- function newTabListener(e) {
-   gBrowser.tabContainer.removeEventListener("TabOpen", newTabListener);
-   var tab = e.target;
-   tab.addEventListener("load", loadListener, false);
- }
+  function newTabListener(e) {
+    gBrowser.tabContainer.removeEventListener("TabOpen", newTabListener);
+    var tab = e.target;
+    tab.addEventListener("load", loadListener, false);
+  }
 
- let deferred = Promise.defer();
- info("Check that clicking the link opens a new tab with the correct URI");
- gBrowser.tabContainer.addEventListener("TabOpen", newTabListener, false);
- info("Click the link to MDN");
- link.click();
- return deferred.promise;
+  let deferred = Promise.defer();
+  info("Check that clicking the link opens a new tab with the correct URI");
+  gBrowser.tabContainer.addEventListener("TabOpen", newTabListener, false);
+  info("Click the link to MDN");
+  link.click();
+  return deferred.promise;
 }
 
 /**
