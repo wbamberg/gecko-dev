@@ -402,7 +402,8 @@ function getSyntax(mdnDocument) {
  * The baseURL to use.
  */
 function setBaseCssDocsUrl(baseUrl) {
-  BASE_MDN_CSS_PAGE = baseUrl;
+  PAGE_LINK_URL = baseUrl;
+  XHR_CSS_URL = baseUrl;
 }
 
 exports.setBaseCssDocsUrl = setBaseCssDocsUrl;

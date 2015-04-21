@@ -42,6 +42,8 @@ const BASIC_TESTING_PROPERTY = "html-mdn-css-basic-testing.html";
 const BASIC_EXPECTED_SUMMARY = "A summary of the property.";
 const BASIC_EXPECTED_SYNTAX = "/* The part we want   */\nthis: is-the-part-we-want";
 
+const URI_PARAMS = "?utm_source=mozilla&utm_medium=firefox-inspector&utm_campaign=default";
+
 add_task(function*() {
   setBaseCssDocsUrl(TEST_URI_ROOT);
 
@@ -97,7 +99,7 @@ function* testTheBasics(widget) {
   info("Check that MDN link text is correct and onclick behavior is correct");
 
   let mdnLink = widget.elements.linkToMdn;
-  let expectedHref = TEST_URI_ROOT + BASIC_TESTING_PROPERTY;
+  let expectedHref = TEST_URI_ROOT + BASIC_TESTING_PROPERTY + URI_PARAMS;
   is(mdnLink.href, expectedHref, "MDN link href is correct");
 
   let uri = yield checkLinkClick(mdnLink);
