@@ -1350,10 +1350,8 @@ CssRuleView.prototype = {
     var showOrig = Services.prefs.getBoolPref(PREF_ORIG_SOURCES);
     this.menuitemSources.setAttribute("checked", showOrig);
 
-    this.ctxMenuNodeInfo = this.getNodeInfo(this.doc.popupNode.parentNode);
-
-    this.menuitemShowMdnDocs.hidden = !this.ctxMenuNodeInfo ||
-                                      this.ctxMenuNodeInfo.type !== overlays.VIEW_NODE_PROPERTY_TYPE;
+    this.menuitemShowMdnDocs.hidden = !this.doc.popupNode.parentNode
+                                      .classList.contains(PROPERTY_NAME_CLASS);
 
     this.menuitemAddRule.disabled = this.inspector.selection.isAnonymousNode();
   },
@@ -1535,11 +1533,7 @@ CssRuleView.prototype = {
    *  Show docs from MDN for a CSS property.
    */
   _onShowMdnDocs: function() {
-    if (!this.ctxMenuNodeInfo) {
-      return;
-    }
-
-    let cssPropertyName = this.ctxMenuNodeInfo.value.property;
+    let cssPropertyName = this.doc.popupNode.textContent;
     let anchor = this.doc.popupNode.parentNode;
     let cssDocsTooltip = this.tooltips.cssDocs;
     cssDocsTooltip.show(anchor, cssPropertyName);
