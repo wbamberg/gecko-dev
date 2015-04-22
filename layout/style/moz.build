@@ -130,6 +130,7 @@ UNIFIED_SOURCES += [
     'nsCSSAnonBoxes.cpp',
     'nsCSSDataBlock.cpp',
     'nsCSSKeywords.cpp',
+    'nsCSSLexer.cpp',
     'nsCSSParser.cpp',
     'nsCSSProps.cpp',
     'nsCSSPseudoClasses.cpp',

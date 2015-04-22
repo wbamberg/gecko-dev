@@ -9,6 +9,7 @@
 #define nsCSSScanner_h___
 
 #include "nsString.h"
+#include "mozilla/dom/CSSTokenBinding.h"
 
 namespace mozilla {
 namespace css {
@@ -26,18 +27,20 @@ enum nsCSSTokenType {
   // White space of any kind.  No value fields are used.  Note that
   // comments do *not* count as white space; comments separate tokens
   // but are not themselves tokens.
-  eCSSToken_Whitespace,     //
+  eCSSToken_Whitespace = static_cast<int>(mozilla::dom::CSSTokenType::WHITESPACE),     //
+  // A comment.
+  eCSSToken_Comment = static_cast<int>(mozilla::dom::CSSTokenType::COMMENT),     // /*...*/
 
   // Identifier-like tokens.  mIdent is the text of the identifier.
   // The difference between ID and Hash is: if the text after the #
   // would have been a valid Ident if the # hadn't been there, the
   // scanner produces an ID token.  Otherwise it produces a Hash token.
   // (This distinction is required by css3-selectors.)
-  eCSSToken_Ident,          // word
-  eCSSToken_Function,       // word(
-  eCSSToken_AtKeyword,      // @word
-  eCSSToken_ID,             // #word
-  eCSSToken_Hash,           // #0word
+  eCSSToken_Ident = static_cast<int>(mozilla::dom::CSSTokenType::IDENT),       // word
+  eCSSToken_Function = static_cast<int>(mozilla::dom::CSSTokenType::FUNCTION), // word(
+  eCSSToken_AtKeyword = static_cast<int>(mozilla::dom::CSSTokenType::AT),      // @word
+  eCSSToken_ID = static_cast<int>(mozilla::dom::CSSTokenType::ID),             // #word
+  eCSSToken_Hash = static_cast<int>(mozilla::dom::CSSTokenType::HASH),         // #0word
 
   // Numeric tokens.  mNumber is the floating-point value of the
   // number, and mHasSign indicates whether there was an explicit sign
@@ -49,32 +52,32 @@ enum nsCSSTokenType {
   // are always considered not to be integers, even if their numeric
   // value is integral (100% => mNumber = 1.0).  For Dimension
   // tokens, mIdent holds the text of the unit.
-  eCSSToken_Number,         // 1 -5 +2e3 3.14159 7.297352e-3
-  eCSSToken_Dimension,      // 24px 8.5in
-  eCSSToken_Percentage,     // 85% 1280.4%
+  eCSSToken_Number = static_cast<int>(mozilla::dom::CSSTokenType::NUMBER), // 1 -5 +2e3 3.14159 7.297352e-3
+  eCSSToken_Dimension = static_cast<int>(mozilla::dom::CSSTokenType::DIMENSION),   // 24px 8.5in
+  eCSSToken_Percentage = static_cast<int>(mozilla::dom::CSSTokenType::PERCENTAGE), // 85% 1280.4%
 
   // String-like tokens.  In all cases, mIdent holds the text
   // belonging to the string, and mSymbol holds the delimiter
   // character, which may be ', ", or zero (only for unquoted URLs).
   // Bad_String and Bad_URL tokens are emitted when the closing
   // delimiter or parenthesis was missing.
-  eCSSToken_String,         // 'foo bar' "foo bar"
-  eCSSToken_Bad_String,     // 'foo bar
-  eCSSToken_URL,            // url(foobar) url("foo bar")
-  eCSSToken_Bad_URL,        // url(foo
+  eCSSToken_String = static_cast<int>(mozilla::dom::CSSTokenType::STRING), // 'foo bar' "foo bar"
+  eCSSToken_Bad_String = static_cast<int>(mozilla::dom::CSSTokenType::BAD_STRING), // 'foo bar
+  eCSSToken_URL = static_cast<int>(mozilla::dom::CSSTokenType::URL),            // url(foobar) url("foo bar")
+  eCSSToken_Bad_URL = static_cast<int>(mozilla::dom::CSSTokenType::BAD_URL),        // url(foo
 
   // Any one-character symbol.  mSymbol holds the character.
-  eCSSToken_Symbol,         // . ; { } ! *
+  eCSSToken_Symbol = static_cast<int>(mozilla::dom::CSSTokenType::SYMBOL),         // . ; { } ! *
 
   // Match operators.  These are single tokens rather than pairs of
   // Symbol tokens because css3-selectors forbids the presence of
   // comments between the two characters.  No value fields are used;
   // the token type indicates which operator.
-  eCSSToken_Includes,       // ~=
-  eCSSToken_Dashmatch,      // |=
-  eCSSToken_Beginsmatch,    // ^=
-  eCSSToken_Endsmatch,      // $=
-  eCSSToken_Containsmatch,  // *=
+  eCSSToken_Includes = static_cast<int>(mozilla::dom::CSSTokenType::INCLUDES),       // ~=
+  eCSSToken_Dashmatch = static_cast<int>(mozilla::dom::CSSTokenType::DASHMATCH),      // |=
+  eCSSToken_Beginsmatch = static_cast<int>(mozilla::dom::CSSTokenType::BEGINSMATCH),    // ^=
+  eCSSToken_Endsmatch = static_cast<int>(mozilla::dom::CSSTokenType::ENDSMATCH),      // $=
+  eCSSToken_Containsmatch = static_cast<int>(mozilla::dom::CSSTokenType::CONTAINSMATCH),  // *=
 
   // Unicode-range token: currently used only in @font-face.
   // The lexical rule for this token includes several forms that are
@@ -84,7 +87,7 @@ enum nsCSSTokenType {
   // token is semantically valid.  In that case, mInteger holds the
   // lowest value included in the range, and mInteger2 holds the
   // highest value included in the range.
-  eCSSToken_URange,         // U+007e U+01?? U+2000-206F
+  eCSSToken_URange = static_cast<int>(mozilla::dom::CSSTokenType::URANGE),         // U+007e U+01?? U+2000-206F
 
   // HTML comment delimiters, ignored as a unit when they appear at
   // the top level of a style sheet, for compatibility with websites
@@ -92,7 +95,7 @@ enum nsCSSTokenType {
   // subsumes the css2.1 CDO and CDC tokens, which are always treated
   // the same by the parser.  mIdent holds the text of the token, for
   // diagnostics.
-  eCSSToken_HTMLComment,    // <!-- -->
+  eCSSToken_HTMLComment = static_cast<int>(mozilla::dom::CSSTokenType::HTMLCOMMENT),    // <!-- -->
 };
 
 // Classification of tokens used to determine if a "/**/" string must be
@@ -182,6 +185,15 @@ private:
   bool mInitialized;
 };
 
+enum nsCSSScannerExclude {
+  // Return all tokens, including whitespace and comments.
+  eCSSScannerExclude_none,
+  // Include whitespace but exclude comments.
+  eCSSScannerExclude_comments,
+  // Exclude whitespace and comments.
+  eCSSScannerExclude_whitespace_and_comments
+};
+
 // nsCSSScanner tokenizes an input stream using the CSS2.1 forward
 // compatible tokenization rules.  Used internally by nsCSSParser;
 // not available for use by other code.
@@ -220,14 +232,20 @@ class nsCSSScanner {
   uint32_t GetColumnNumber() const
   { return mTokenOffset - mTokenLineOffset; }
 
+  uint32_t GetTokenOffset() const
+  { return mTokenOffset; }
+
+  uint32_t GetTokenEndOffset() const
+  { return mOffset; }
+
   // Get the text of the line containing the first character of
   // the most recently processed token.
   nsDependentSubstring GetCurrentLine() const;
 
   // Get the next token.  Return false on EOF.  aTokenResult is filled
-  // in with the data for the token.  If aSkipWS is true, skip over
-  // eCSSToken_Whitespace tokens rather than returning them.
-  bool Next(nsCSSToken& aTokenResult, bool aSkipWS);
+  // in with the data for the token.  aSkip controls whether
+  // whitespace and/or comment tokens are ever returned.
+  bool Next(nsCSSToken& aTokenResult, nsCSSScannerExclude aSkip);
 
   // Get the body of an URL token (everything after the 'url(').
   // This is exposed for use by nsCSSParser::ParseMozDocumentRule,

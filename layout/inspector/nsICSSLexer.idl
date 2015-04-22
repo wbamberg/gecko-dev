@@ -1,0 +1,34 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+  * License, v. 2.0. If a copy of the MPL was not distributed with this
+  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "nsISupports.idl"
+
+/**
+  * nsICSSLexer is an interface to the CSS lexer.  It tokenizes an
+  * input stream and returns CSS tokens.
+  *
+  * @see CSSToken for a description of the tokens.
+  * @see inIDOMUtils.getCSSLexer to create an instance of the lexer.
+  */
+[scriptable, uuid(82d0fba1-fb53-4739-9ba0-e8b006253446)]
+interface nsICSSLexer : nsISupports
+{
+  /**
+   * Return the line number of the most recently returned token.  Line
+   * numbers are 0-based.
+   */
+  unsigned long getLineNumber();
+
+  /**
+   * Return the column number of the most recently returned token.
+   * Column numbers are 0-based.
+   */
+  unsigned long getColumnNumber();
+
+  /**
+   * Return the next token.
+   */
+  [implicit_jscontext]
+  jsval nextToken();
+};

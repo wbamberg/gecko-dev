@@ -46,6 +46,7 @@
 #include "nsStyleSet.h"
 #include "nsStyleUtil.h"
 #include "nsQueryObject.h"
+#include "nsCSSLexer.h"
 
 using namespace mozilla;
 using namespace mozilla::css;
@@ -286,6 +287,14 @@ inDOMUtils::GetRuleColumn(nsIDOMCSSRule* aRule, uint32_t* _retval)
   }
 
   *_retval = rule->GetColumnNumber();
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+inDOMUtils::GetCSSLexer(const nsAString& aText, nsICSSLexer** aResult)
+{
+  *aResult = new nsCSSLexer(aText);
+  NS_ADDREF(*aResult);
   return NS_OK;
 }
 

@@ -28,6 +28,58 @@ const {Cc, Cu, Ci} = require("chrome");
 Cu.import("resource://gre/modules/Services.jsm");
 Cu.import("resource://gre/modules/Promise.jsm");
 
+const DOMUtils = Cc["@mozilla.org/inspector/dom-utils;1"].getService(Ci.inIDOMUtils);
+
+const PROPERTY_NAME_CLASS = "theme-fg-color5";
+const PROPERTY_VALUE_CLASS = "theme-fg-color1";
+
+function createSpan(doc, textContent, className) {
+  let newNode = doc.createElement("span");
+  newNode.classList.add(className);
+  newNode.textContent = textContent;
+  return newNode;
+}
+
+function getTokenText(wholeString, token) {
+  return wholeString.slice(token.startOffset, token.endOffset);
+}
+
+function endsWith(string, suffix) {
+  return string.indexOf(suffix, string.length - suffix.length) !== -1;
+}
+
+function populatePropertySyntax(doc, syntaxText, syntaxSection) {
+  let tokenText = getTokenText.bind(this, syntaxText)
+  let lexer = DOMUtils.getCSSLexer(syntaxText);
+  let isAtNewLine = true;
+  while (true) {
+    let token = lexer.nextToken();
+    if (!token) {
+      break;
+    }
+
+    if ((token.tokenType == "IDENT") && isAtNewLine) {
+      let propNameNode = createSpan(doc, tokenText(token), PROPERTY_NAME_CLASS);
+      syntaxSection.appendChild(propNameNode);
+    }
+    else if ((token.tokenType == "WHITESPACE") ||
+             (token.tokenType == "COMMENT") ||
+             (token.tokenType == "SYMBOL")) {
+      let textNode = doc.createTextNode(tokenText(token));
+      syntaxSection.appendChild(textNode);
+    }
+    else {
+      let propValueNode = createSpan(doc, tokenText(token), PROPERTY_VALUE_CLASS);
+      syntaxSection.appendChild(propValueNode);
+    }
+
+    isAtNewLine = false;
+    if (token.tokenType == "WHITESPACE" && (endsWith(tokenText(token), "\n"))) {
+      isAtNewLine = true;
+    }
+  }
+}
+
 // Parameters for the XHR request
 // see https://developer.mozilla.org/en-US/docs/MDN/Kuma/API#Document_parameters
 const XHR_PARAMS = "?raw&macros";
@@ -154,6 +206,8 @@ function MdnDocsWidget(tooltipDocument) {
     linkToMdn: tooltipDocument.getElementById("visit-mdn-page")
   };
 
+  this.doc = tooltipDocument;
+
   // get the localized string for the link text
   this.elements.linkToMdn.textContent =
     l10n.strings.GetStringFromName("docsTooltip.visitMDN");
@@ -226,7 +280,8 @@ MdnDocsWidget.prototype = {
     function finalizeDocument({summary, syntax}) {
       // set docs summary and syntax
       elements.summary.textContent = summary;
-      elements.syntax.textContent = syntax;
+
+      populatePropertySyntax(doc, syntax, elements.syntax);
 
       // hide the throbber
       elements.info.classList.remove("devtools-throbber");
@@ -252,6 +307,7 @@ MdnDocsWidget.prototype = {
 
     let deferred = Promise.defer();
     let elements = this.elements;
+    let doc = this.doc;
 
     initializeDocument(propertyName);
     getCssDocs(propertyName).then(finalizeDocument, gotError);
