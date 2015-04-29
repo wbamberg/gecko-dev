@@ -4,7 +4,7 @@
 
 /**
  * This file tests the "devtools.inspector.mdnDocsTooltip.enabled" preference,
- * that we use to disable the MDN tooltip in the Inspector.
+ * that we use to enable/disable the MDN tooltip in the Inspector.
  *
  * The desired behavior is:
  * - if the preference is true, show the "Show MDN Docs" context menu item
@@ -12,26 +12,27 @@
  * - listen for changes to the pref, so we can show/hide the item dynamically
  *
  * Here's what the test does:
- * 1. set "devtools.inspector.mdnDocsTooltip.enabled" to true
+ * 1. ensure "devtools.inspector.mdnDocsTooltip.enabled" is true
  * 2. inspect an element
- * 3. click a property name in the rule view
- *   -> check that we see the MDN context menu item
+ * 3. set the popupNode for the context menu
+ *   -> check that the MDN context menu item is not hidden
  * 4. set "devtools.inspector.mdnDocsTooltip.enabled" to false
- * 5. click a property name in the rule view
- *   -> check that we do not see the MDN context menu item
+ * 5. set the popupNode for the context menu
+ *   -> check that the MDN context menu item is hidden
  * 6. close the Inspector
  * 7. inspect an element
- * 8. click a property name in the rule view
- *   -> check that we do not see the MDN context menu item
+ * 8. set the popupNode for the context menu
+ *   -> check that the MDN context menu item is hidden
  * 9. set "devtools.inspector.mdnDocsTooltip.enabled" to true
- * 10. click a property name in the rule view
- *   -> check that we see the MDN context menu item
+ * 10. set the popupNode for the context menu
+ *   -> check that the MDN context menu item is not hidden
+ * 11. ensure "devtools.inspector.mdnDocsTooltip.enabled" is reset
+ * to its original value
  */
 
 "use strict";
 
 const { PrefObserver } = devtools.require("devtools/styleeditor/utils");
-const PROPERTYNAME = "color";
 const PREF_ENABLE_MDN_DOCS_TOOLTIP = "devtools.inspector.mdnDocsTooltip.enabled";
 const PROPERTY_NAME_CLASS = "ruleview-propertyname";
 
@@ -39,13 +40,12 @@ const TEST_DOC = `
 <html>
   <body>
     <div style="color: red">
-      Test pref to enable the "Show MDN Docs" context menu option
+      Test the pref to enable/disable the "Show MDN Docs" context menu option
     </div>
   </body>
 </html>`;
 
 add_task(function* () {
-
   info("Ensure the pref is true to begin with");
   let initial = Services.prefs.getBoolPref(PREF_ENABLE_MDN_DOCS_TOOLTIP);
   if (initial != true) {
@@ -96,8 +96,10 @@ function* setBooleanPref(pref, state) {
   let oncePrefChanged = promise.defer();
   let prefObserver = new PrefObserver("devtools.");
   prefObserver.on(pref, oncePrefChanged.resolve);
+
   info("Set the pref " + pref + " to: " + state);
   Services.prefs.setBoolPref(pref, state);
+
   info("Wait for prefObserver to call back so the UI can update");
   yield oncePrefChanged.promise;
   prefObserver.off(pref, oncePrefChanged.resolve);
@@ -114,9 +116,9 @@ function* testMdnContextMenuItemVisibility(view, shouldBeVisible) {
   let message = shouldBeVisible? "shown": "hidden";
   info("Test that MDN context menu item is " + message);
 
+  info("Set a CSS property name as popupNode");
   let root = rootElement(view);
   let node = root.querySelector("." + PROPERTY_NAME_CLASS).firstChild;
-  info("Set " + node + " as popupNode");
   view.doc.popupNode = node;
 
   info("Update context menu state");
