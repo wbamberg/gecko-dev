@@ -292,6 +292,32 @@ if (typeof Mozilla == 'undefined') {
 		});
 	};
 
+	Mozilla.UITour.openWebConsole = function(callback) {
+		_sendEvent('openWebConsole', {
+			callbackID: _waitForCallback(callback)
+		});
+	};
+
+	Mozilla.UITour.setWebConsoleInput = function(input, callback) {
+		_sendEvent('setWebConsoleInput', {
+			input: input,
+			callbackID: _waitForCallback(callback)
+		});
+	};
+
+	Mozilla.UITour.executeWebConsoleInput = function(callback) {
+		_sendEvent('executeWebConsoleInput', {
+			callbackID: _waitForCallback(callback)
+		});
+	};
+
+	Mozilla.UITour.sendWebConsoleKeys = function(keys, callback) {
+		_sendEvent('setWebConsoleInput', {
+			input: input,
+			callbackID: _waitForCallback(callback)
+		});
+	};
+
 	Mozilla.UITour.forceShowReaderIcon = function() {
 		_sendEvent('forceShowReaderIcon');
 	};

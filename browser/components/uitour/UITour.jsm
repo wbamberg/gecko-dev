@@ -259,6 +259,22 @@ this.UITour = {
       widgetName: "urlbar-container",
     }],
     ["webide",      {query: "#webide-button"}],
+    ["webconsoleinput", {
+      query: (aDocument) => {
+        Cu.import("resource:///modules/devtools/gDevTools.jsm");
+        Cu.import("resource://gre/modules/devtools/Loader.jsm");
+
+        var chromeTab = aDocument.defaultView.gBrowser.selectedTab;
+        var target = devtools.TargetFactory.forTab(chromeTab);
+        var toolbox = gDevTools.getToolbox(target);
+        var panel = toolbox.getPanel("webconsole");
+
+        var consoleDoc = panel._frameWindow.document;
+        var nbox = consoleDoc.getElementById("webconsole-notificationbox");
+        var textboxes = nbox.getElementsByTagName("textbox");
+        return textboxes[1];
+      },
+    }],
   ]),
 
   init: function() {
@@ -712,6 +728,49 @@ this.UITour = {
             searchbar.openSuggestionsPanel();
           }
         }).then(null, Cu.reportError);
+        break;
+      }
+
+      case "openWebConsole": {
+        Cu.import("resource:///modules/devtools/gDevTools.jsm");
+        Cu.import("resource://gre/modules/devtools/Loader.jsm");
+
+        var chromeTab = window.gBrowser.selectedTab;
+        var target = devtools.TargetFactory.forTab(chromeTab);
+
+        gDevTools.showToolbox(target, "webconsole").then(() => {
+          this.sendPageCallback(messageManager, data.callbackID);
+        });
+        break;
+      }
+
+      case "setWebConsoleInput": {
+        Cu.import("resource:///modules/devtools/gDevTools.jsm");
+        Cu.import("resource://gre/modules/devtools/Loader.jsm");
+
+        var chromeTab = window.gBrowser.selectedTab;
+        var target = devtools.TargetFactory.forTab(chromeTab);
+        var toolbox = gDevTools.getToolbox(target);
+        var panel = toolbox.getPanel("webconsole");
+
+        panel.hud.jsterm.setInputValue(data.input);
+
+        this.sendPageCallback(messageManager, data.callbackID);
+        break;
+      }
+
+      case "executeWebConsoleInput": {
+        Cu.import("resource:///modules/devtools/gDevTools.jsm");
+        Cu.import("resource://gre/modules/devtools/Loader.jsm");
+
+        var chromeTab = window.gBrowser.selectedTab;
+        var target = devtools.TargetFactory.forTab(chromeTab);
+        var toolbox = gDevTools.getToolbox(target);
+        var panel = toolbox.getPanel("webconsole");
+
+        panel.hud.jsterm.execute();
+
+        this.sendPageCallback(messageManager, data.callbackID);
         break;
       }
 
@@ -1422,6 +1481,9 @@ this.UITour = {
       }
 
       tooltipTitle.textContent = aTitle || "";
+      if (tooltipTitle.textContent == "") {
+        tooltipTitle.style.display = "none";
+      }
       tooltipDesc.textContent = aDescription || "";
       tooltipIcon.src = aIconURL || "";
       tooltipIconContainer.hidden = !aIconURL;
@@ -1487,7 +1549,7 @@ this.UITour = {
 
       tooltip.setAttribute("targetName", aAnchor.targetName);
       tooltip.hidden = false;
-      let alignment = "bottomcenter topright";
+      let alignment = "bottomleft topright";
       if (aAnchor.infoPanelPosition) {
         alignment = aAnchor.infoPanelPosition;
       }
@@ -1495,7 +1557,7 @@ this.UITour = {
       let { infoPanelOffsetX: xOffset, infoPanelOffsetY: yOffset } = aAnchor;
 
       this._addAnnotationPanelMutationObserver(tooltip);
-      tooltip.openPopup(aAnchorEl, alignment, xOffset || 0, yOffset || 0);
+      tooltip.openPopup(aAnchorEl, alignment, xOffset || 50, yOffset || 0);
       if (tooltip.state == "closed") {
         document.defaultView.addEventListener("endmodalstate", function endModalStateHandler() {
           document.defaultView.removeEventListener("endmodalstate", endModalStateHandler);
