@@ -311,13 +311,6 @@ if (typeof Mozilla == 'undefined') {
 		});
 	};
 
-	Mozilla.UITour.sendWebConsoleKeys = function(keys, callback) {
-		_sendEvent('setWebConsoleInput', {
-			input: input,
-			callbackID: _waitForCallback(callback)
-		});
-	};
-
 	Mozilla.UITour.forceShowReaderIcon = function() {
 		_sendEvent('forceShowReaderIcon');
 	};
